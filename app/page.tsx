@@ -1,30 +1,16 @@
-'use client'
-
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { useAuth } from '@/lib/auth-context'
-import { Loader2 } from 'lucide-react'
-
-export default function HomePage() {
-  const router = useRouter()
-  const { user, loading } = useAuth()
-
-  useEffect(() => {
-    if (!loading) {
-      if (user) {
-        router.push('/dashboard')
-      } else {
-        router.push('/login')
-      }
-    }
-  }, [user, loading, router])
-
+export default function Home() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-        <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-      </div>
-    </div>
-  )
+    <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <h1 className="text-3xl font-bold">app_efir deployed ✅</h1>
+      <p className="text-gray-600">
+        If you see this page on Vercel, the infinite loading was from the previous page/auth logic.
+      </p>
+      <a
+        href="/dashboard"
+        className="px-4 py-2 rounded bg-black text-white"
+      >
+        Go to dashboard
+      </a>
+    </main>
+  );
 }
