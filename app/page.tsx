@@ -3,7 +3,7 @@ export default function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center gap-4">
       <h1 className="text-3xl font-bold">app_efir deployed ✅</h1>
       <p className="text-gray-600">
-        If you see this page on Vercel, the infinite loading was from the previous page/auth logic.
+        This is a static page from the latest deployment.
       </p>
       <a
         href="/dashboard"

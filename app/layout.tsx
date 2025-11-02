@@ -1,6 +1,7 @@
+import type { Metadata } from 'next';
 import './globals.css';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'app_efir',
   description: 'EFIR test app',
 };
