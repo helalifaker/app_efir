@@ -1,9 +1,10 @@
+// synced for vercel
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function createClient() {
   // Next.js 16: cookies() is async
-  const cookieStore = await cookies();
+  const cookieStore = await cookies(); // next16
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
