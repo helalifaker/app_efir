@@ -10,6 +10,7 @@ import { parsePnlCsv } from '@/lib/importers/pnl';
 import { parseBsCsv } from '@/lib/importers/bs';
 import { parseCfCsv } from '@/lib/importers/cf';
 import { TabType } from '@/lib/schemas/tabs';
+import { logger } from '@/lib/logger';
 
 type ImportCsvModalProps = {
   versionId: string;
@@ -22,7 +23,7 @@ export default function ImportCsvModal({ versionId, tab, isOpen, onClose }: Impo
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvText, setCsvText] = useState('');
-  const [previewData, setPreviewData] = useState<Record<string, any> | null>(null);
+  const [previewData, setPreviewData] = useState<Record<string, unknown> | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
 
@@ -42,7 +43,7 @@ export default function ImportCsvModal({ versionId, tab, isOpen, onClose }: Impo
   };
 
   const parseCsv = (text: string) => {
-    let result: { data: Record<string, any>; errors: string[] };
+    let result: { data: Record<string, unknown>; errors: string[] };
 
     if (tab === 'pnl') {
       result = parsePnlCsv(text);
@@ -92,9 +93,10 @@ export default function ImportCsvModal({ versionId, tab, isOpen, onClose }: Impo
       setCsvText('');
       setPreviewData(null);
       setErrors([]);
-    } catch (error: any) {
-      console.error('Import error:', error);
-      toast.error(`Failed to import: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import';
+      logger.error('CSV import failed', error, { versionId, tab });
+      toast.error(`Failed to import: ${errorMessage}`);
     } finally {
       setImporting(false);
     }

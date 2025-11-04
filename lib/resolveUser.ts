@@ -1,5 +1,6 @@
 // lib/resolveUser.ts
 import { getServiceClient } from './supabaseServer';
+import { logger } from './logger';
 
 /**
  * Resolve a user ID to email (or name if available in profiles)
@@ -31,7 +32,7 @@ export async function resolveUser(userId: string | null): Promise<string> {
 
     return 'System';
   } catch (e) {
-    console.error('Error resolving user:', e);
+    logger.error('Error resolving user', e instanceof Error ? e : new Error(String(e)), { userId, operation: 'resolve_user' });
     return 'System';
   }
 }

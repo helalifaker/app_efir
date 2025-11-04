@@ -4,7 +4,7 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogContext {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 class Logger {
@@ -29,7 +29,7 @@ class Logger {
   /**
    * Mask sensitive data from objects
    */
-  private maskSensitiveData(data: any): any {
+  private maskSensitiveData(data: unknown): unknown {
     if (!data || typeof data !== 'object') {
       return data;
     }
@@ -38,7 +38,7 @@ class Logger {
       return data.map(item => this.maskSensitiveData(item));
     }
     
-    const masked: any = {};
+    const masked: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
       const lowerKey = key.toLowerCase();
       if (this.sensitiveKeys.some(sk => lowerKey.includes(sk))) {

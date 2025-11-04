@@ -53,10 +53,11 @@ export async function addTab(
 
 /**
  * Set version status
+ * Blueprint: Status values are capitalized (Draft, Ready, Locked, Archived)
  */
 export async function setVersionStatus(
   versionId: string,
-  status: 'draft' | 'ready' | 'locked'
+  status: 'Draft' | 'Ready' | 'Locked' | 'Archived'
 ) {
   const { error } = await supabase
     .from('model_versions')

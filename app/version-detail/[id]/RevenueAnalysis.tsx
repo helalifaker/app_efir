@@ -6,11 +6,11 @@ type PnlData = {
   revenue?: number;
   students_count?: number;
   avg_tuition_fee?: number;
-  other_income?: Record<string, any>;
-  [key: string]: any;
+  other_income?: Record<string, unknown>;
+  [key: string]: unknown;
 };
 
-export default async function RevenueAnalysis({ pnlData, versionName }: { pnlData: any; versionName: string }) {
+export default async function RevenueAnalysis({ pnlData, versionName }: { pnlData: Record<string, unknown> | null; versionName: string }) {
   const settings = await getSettings();
   const vatRate = settings.vat.rate;
   
@@ -25,7 +25,7 @@ export default async function RevenueAnalysis({ pnlData, versionName }: { pnlDat
   // Calculate breakdown
   const tuitionRevenue = studentsCount * avgTuitionFee;
   const otherIncomeTotal = typeof otherIncome === 'object' && !Array.isArray(otherIncome)
-    ? Object.values(otherIncome).reduce((sum: number, val: any) => {
+    ? Object.values(otherIncome).reduce((sum: number, val: unknown) => {
         const num = typeof val === 'number' ? val : parseFloat(String(val)) || 0;
         return sum + num;
       }, 0)

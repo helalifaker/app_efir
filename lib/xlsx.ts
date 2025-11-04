@@ -2,7 +2,7 @@
 // Excel export utilities using xlsx library
 
 import * as XLSX from 'xlsx';
-import { AppSettings, getSettings } from './getSettings';
+import { AppSettings, getSettings, DEFAULT_SETTINGS } from './getSettings';
 
 /**
  * Format a number using admin settings
@@ -24,7 +24,7 @@ function formatNumber(value: number | null | undefined, settings: AppSettings): 
  * Convert JSON data to flat rows with stable ordering
  * Maps nested objects to key-value pairs, sorted alphabetically
  */
-function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string; value: string | number }> {
+function jsonToRows(data: Record<string, unknown>, prefix = ''): Array<{ key: string; value: string | number }> {
   const rows: Array<{ key: string; value: string | number }> = [];
   const keys = Object.keys(data).sort(); // Stable ordering
   
@@ -36,7 +36,7 @@ function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string
       rows.push({ key: fullKey, value: '' });
     } else if (typeof value === 'object' && !Array.isArray(value) && value !== null) {
       // Recursively process nested objects
-      rows.push(...jsonToRows(value, fullKey));
+      rows.push(...jsonToRows(value as Record<string, unknown>, fullKey));
     } else if (Array.isArray(value)) {
       // Handle arrays - convert to comma-separated or show length
       if (value.length === 0) {
@@ -44,13 +44,13 @@ function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string
       } else if (value.every(item => typeof item === 'object' && item !== null)) {
         // Array of objects - flatten each item
         value.forEach((item, index) => {
-          rows.push(...jsonToRows(item, `${fullKey}[${index}]`));
+          rows.push(...jsonToRows(item as Record<string, unknown>, `${fullKey}[${index}]`));
         });
       } else {
         rows.push({ key: fullKey, value: value.join(', ') });
       }
     } else {
-      rows.push({ key: fullKey, value });
+      rows.push({ key: fullKey, value: value as string | number });
     }
   }
   
@@ -62,7 +62,7 @@ function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string
  */
 export async function exportTabToExcel(params: {
   tabName: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   metadata: {
     modelName: string;
     versionName: string;
@@ -72,7 +72,15 @@ export async function exportTabToExcel(params: {
   filename?: string;
 }): Promise<void> {
   const { tabName, data, metadata, filename } = params;
-  const settings = await getSettings();
+  
+  // Try to get settings, fallback to defaults if unavailable (client-side)
+  let settings: AppSettings;
+  try {
+    settings = await getSettings();
+  } catch {
+    // If getSettings fails (e.g., client-side), use defaults
+    settings = DEFAULT_SETTINGS;
+  }
   
   // Create workbook
   const wb = XLSX.utils.book_new();
@@ -133,12 +141,19 @@ export async function exportCompareToExcel(params: {
     model_name: string;
   }>;
   baselineId: string;
-  dataByVersion: Record<string, Record<string, any>>;
+  dataByVersion: Record<string, Record<string, unknown>>;
   allKeys: string[];
   filename?: string;
 }): Promise<void> {
   const { tabName, versions, baselineId, dataByVersion, allKeys, filename } = params;
-  const settings = await getSettings();
+  // Try to get settings, fallback to defaults if unavailable (client-side)
+  let settings: AppSettings;
+  try {
+    settings = await getSettings();
+  } catch {
+    // If getSettings fails (e.g., client-side), use defaults
+    settings = DEFAULT_SETTINGS;
+  }
   
   // Find baseline
   const baseline = versions.find(v => v.id === baselineId);

@@ -1,15 +1,11 @@
 // app/api/versions/[id]/history/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { UuidSchema, validateQuery } from "@/lib/validateRequest";
 import { logger } from "@/lib/logger";
 import { withErrorHandler } from "@/lib/withErrorHandler";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
-);
+import { getServiceClient } from "@/lib/supabaseServer";
+import { verifyVersionOwnership, getCurrentUserId } from "@/lib/ownership";
 
 const QuerySchema = z.object({
   limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100)).optional(),
@@ -18,9 +14,13 @@ const QuerySchema = z.object({
 
 export const GET = withErrorHandler(async (
   req: NextRequest,
-  ctx: { params: Promise<{ id: string }> }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
-  const { id } = await ctx.params;
+  if (!ctx?.params) {
+    return NextResponse.json({ error: 'Missing route parameters' }, { status: 400 });
+  }
+  const params = await ctx.params;
+  const { id } = params as { id: string };
   
   // Validate UUID
   const uuidValidation = UuidSchema.safeParse(id);
@@ -41,6 +41,15 @@ export const GET = withErrorHandler(async (
     return queryValidation.response;
   }
   const { limit = 50, offset = 0 } = queryValidation.data;
+
+  // Verify ownership
+  const userId = await getCurrentUserId();
+  const ownershipCheck = await verifyVersionOwnership(id, userId);
+  if (!ownershipCheck.owned) {
+    return ownershipCheck.error || NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const supabase = getServiceClient();
 
   // Build query with pagination
   const query = supabase

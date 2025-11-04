@@ -33,7 +33,8 @@ async function addTab(versionId: string, tab: string, data: Record<string, unkno
   if (error) throw new Error(`Failed to add tab: ${error.message}`);
 }
 
-async function setVersionStatus(versionId: string, status: 'draft' | 'ready' | 'locked') {
+// Blueprint: Status values are capitalized (Draft, Ready, Locked, Archived)
+async function setVersionStatus(versionId: string, status: 'Draft' | 'Ready' | 'Locked' | 'Archived') {
   const supabase = getTestSupabase();
   const { error } = await supabase
     .from('model_versions')
@@ -45,7 +46,7 @@ async function setVersionStatus(versionId: string, status: 'draft' | 'ready' | '
 test.describe('Version Detail Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to version detail page
-    await page.goto(`/version-detail/${TEST_VERSION_ID}`);
+    await page.goto(`/versions/${TEST_VERSION_ID}/overview`);
   });
 
   test('should display version details and tabs', async ({ page }) => {
@@ -58,17 +59,17 @@ test.describe('Version Detail Flow', () => {
     // Check status is displayed
     await expect(page.locator('text=Status')).toBeVisible();
 
-    // Check tabs are displayed (6 blocks)
-    const tabBlocks = page.locator('section.grid.grid-cols-2').locator('div.border.rounded');
-    await expect(tabBlocks).toHaveCount(6);
-
-    // Check specific tabs exist
-    await expect(page.locator('text=OVERVIEW')).toBeVisible();
-    await expect(page.locator('text=PNL')).toBeVisible();
-    await expect(page.locator('text=BS')).toBeVisible();
-    await expect(page.locator('text=CF')).toBeVisible();
+    // Check tab navigation is displayed
+    await expect(page.locator('nav')).toBeVisible();
+    
+    // Check specific tabs exist in navigation
+    await expect(page.locator('text=Overview')).toBeVisible();
+    await expect(page.locator('text=Assumptions')).toBeVisible();
+    await expect(page.locator('text=P&L')).toBeVisible();
+    await expect(page.locator('text=Balance Sheet')).toBeVisible();
+    await expect(page.locator('text=Cash Flow')).toBeVisible();
     await expect(page.locator('text=CAPEX')).toBeVisible();
-    await expect(page.locator('text=CONTROLS')).toBeVisible();
+    await expect(page.locator('text=Validation')).toBeVisible();
 
     // Check validations section exists
     await expect(page.locator('text=Validations')).toBeVisible();
@@ -177,7 +178,7 @@ test.describe('Version Detail Flow', () => {
 test.describe('Version Clone Flow', () => {
   test('should clone version and navigate to new id', async ({ page, request }) => {
     // Navigate to clone source version
-    await page.goto(`/version-detail/${CLONE_VERSION_ID}`);
+    await page.goto(`/versions/${CLONE_VERSION_ID}/overview`);
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Get the current URL
@@ -200,7 +201,7 @@ test.describe('Version Clone Flow', () => {
     expect(cloneData.name).toBe('E2E Cloned Version');
 
     // Navigate to the cloned version
-    await page.goto(`/version-detail/${cloneData.id}`);
+    await page.goto(`/versions/${cloneData.id}/overview`);
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Verify we're on the new version's page
@@ -211,9 +212,9 @@ test.describe('Version Clone Flow', () => {
     await expect(page.locator('h1')).toContainText('E2E Cloned Version');
     await expect(page.locator('text=Status')).toContainText('draft'); // Cloned versions start as draft
 
-    // Verify tabs were cloned
-    await expect(page.locator('text=OVERVIEW')).toBeVisible();
-    await expect(page.locator('text=PNL')).toBeVisible();
+    // Verify tabs were cloned (check navigation)
+    await expect(page.locator('text=Overview')).toBeVisible();
+    await expect(page.locator('text=P&L')).toBeVisible();
   });
 });
 

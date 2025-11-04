@@ -6,13 +6,14 @@ import { exportTabToExcel } from '@/lib/xlsx';
 import { exportTabToCsv } from '@/lib/csv';
 import toast from 'react-hot-toast';
 import ImportCsvModal from './ImportCsvModal';
+import { logger } from '@/lib/logger';
 import { TabType } from '@/lib/schemas/tabs';
 
 type ExportButtonProps = {
   tabName: string;
   tab: TabType;
   versionId: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   metadata: {
     modelName: string;
     versionName: string;
@@ -37,9 +38,10 @@ export default function ExportButton({ tabName, tab, versionId, data, metadata }
         await exportTabToCsv({ tabName, data, metadata });
         toast.success(`${tabName.toUpperCase()} exported to CSV`);
       }
-    } catch (error: any) {
-      console.error('Export error:', error);
-      toast.error(`Failed to export ${tabName}: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export';
+      logger.error('Export failed', error, { tabName, versionId, format });
+      toast.error(`Failed to export ${tabName}: ${errorMessage}`);
     } finally {
       setExporting(false);
     }
@@ -50,7 +52,7 @@ export default function ExportButton({ tabName, tab, versionId, data, metadata }
   return (
     <>
       <div className="flex gap-2 mt-2">
-        {canImport && metadata.status !== 'locked' && (
+        {canImport && metadata.status !== 'Locked' && metadata.status !== 'Archived' && (
           <button
             onClick={() => setImportModalOpen(true)}
             className="text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-[10px]"

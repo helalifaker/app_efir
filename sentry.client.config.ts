@@ -1,14 +1,16 @@
 // sentry.client.config.ts
 import * as Sentry from '@sentry/nextjs';
 
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'development',
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-  debug: process.env.NODE_ENV === 'development',
+// Only initialize Sentry if DSN is provided
+if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    debug: process.env.NODE_ENV === 'development',
   
   // Mask PII (Personally Identifiable Information)
-  beforeSend(event, hint) {
+  beforeSend(event) {
     // Remove sensitive data from event
     if (event.request) {
       // Remove sensitive headers
@@ -46,5 +48,6 @@ Sentry.init({
     'Non-Error promise rejection captured',
     'Network request failed',
   ],
-});
+  });
+}
 

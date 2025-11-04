@@ -79,7 +79,7 @@ export function parseBsCsv(csvText: string): {
     if (value && value !== '') {
       const num = parseFloat(value);
       if (!isNaN(num)) {
-        (data as any)[key] = num;
+        (data as Record<string, unknown>)[key] = num;
       } else {
         errors.push(`Invalid number for ${key}: ${value}`);
       }

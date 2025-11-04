@@ -60,7 +60,7 @@ async function seedTestData() {
         id: versionId,
         model_id: modelId,
         name: 'E2E Test Version',
-        status: 'draft',
+        status: 'Draft', // Blueprint: capitalized status
         created_by: null,
       });
 
@@ -133,7 +133,7 @@ async function seedTestData() {
         id: cloneVersionId,
         model_id: modelId,
         name: 'E2E Clone Source',
-        status: 'ready',
+        status: 'Ready', // Blueprint: capitalized status
         created_by: null,
       });
 

@@ -2,6 +2,7 @@
 import { unstable_cache } from 'next/cache';
 import { revalidateTag } from 'next/cache';
 import { getServiceClient } from './supabaseServer';
+import { logger } from './logger';
 
 export type CompareVersion = {
   id: string;
@@ -11,9 +12,9 @@ export type CompareVersion = {
 };
 
 export type VersionTabData = {
-  pnl: Record<string, any>;
-  bs: Record<string, any>;
-  cf: Record<string, any>;
+  pnl: Record<string, unknown>;
+  bs: Record<string, unknown>;
+  cf: Record<string, unknown>;
 };
 
 export type CompareData = {
@@ -49,7 +50,7 @@ async function _getCompareData(
     .in('id', versionIds);
 
   if (vErr) {
-    console.error('Compare versions query error:', vErr);
+    logger.error('Compare versions query error', vErr, { versionIds, operation: 'get_compare_data' });
     throw vErr;
   }
 
@@ -62,7 +63,7 @@ async function _getCompareData(
     id: v.id,
     name: v.name,
     status: v.status,
-    model_name: v.models?.name || 'Unknown Model',
+    model_name: v.models?.[0]?.name || (Array.isArray(v.models) ? v.models[0]?.name : v.models?.name) || 'Unknown Model',
   }));
 
   // Fetch tabs for all versions (pnl, bs, cf only)
@@ -73,7 +74,7 @@ async function _getCompareData(
     .in('tab', ['pnl', 'bs', 'cf']);
 
   if (tErr) {
-    console.error('Compare tabs query error:', tErr);
+    logger.error('Compare tabs query error', tErr, { versionIds, operation: 'get_compare_data' });
     throw tErr;
   }
 
@@ -83,7 +84,7 @@ async function _getCompareData(
     tabsByVersion[vid] = { pnl: {}, bs: {}, cf: {} };
   });
 
-  (tabs || []).forEach((tab: any) => {
+  (tabs || []).forEach((tab: { version_id: string; tab: string; data: Record<string, unknown> | null }) => {
     if (tabsByVersion[tab.version_id]) {
       tabsByVersion[tab.version_id][tab.tab as keyof VersionTabData] = tab.data || {};
     }

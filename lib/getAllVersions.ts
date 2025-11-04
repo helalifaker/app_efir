@@ -1,5 +1,6 @@
 // lib/getAllVersions.ts
 import { getServiceClient } from './supabaseServer';
+import { logger } from './logger';
 
 export type VersionOption = {
   id: string;
@@ -21,7 +22,7 @@ export async function getAllVersions(): Promise<VersionOption[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('All versions query error:', error);
+    logger.error('All versions query error', error, { operation: 'fetch_all_versions' });
     throw error;
   }
 
@@ -29,7 +30,7 @@ export async function getAllVersions(): Promise<VersionOption[]> {
     id: v.id,
     name: v.name,
     status: v.status,
-    model_name: v.models?.name || 'Unknown Model',
+    model_name: v.models?.[0]?.name || 'Unknown Model',
     model_id: v.model_id,
   }));
 }

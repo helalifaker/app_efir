@@ -41,7 +41,7 @@ export function downloadCsv(content: string, filename: string): void {
  * Convert JSON data to flat rows with stable ordering
  * Maps nested objects to key-value pairs, sorted alphabetically
  */
-function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string; value: string | number }> {
+function jsonToRows(data: Record<string, unknown>, prefix = ''): Array<{ key: string; value: string | number }> {
   const rows: Array<{ key: string; value: string | number }> = [];
   const keys = Object.keys(data).sort(); // Stable ordering
   
@@ -53,7 +53,7 @@ function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string
       rows.push({ key: fullKey, value: '' });
     } else if (typeof value === 'object' && !Array.isArray(value) && value !== null) {
       // Recursively process nested objects
-      rows.push(...jsonToRows(value, fullKey));
+      rows.push(...jsonToRows(value as Record<string, unknown>, fullKey));
     } else if (Array.isArray(value)) {
       // Handle arrays
       if (value.length === 0) {
@@ -66,8 +66,8 @@ function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string
       } else {
         rows.push({ key: fullKey, value: value.join(', ') });
       }
-    } else {
-      rows.push({ key: fullKey, value });
+      } else {
+      rows.push({ key: fullKey, value: value as string | number });
     }
   }
   
@@ -79,7 +79,7 @@ function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string
  */
 export async function exportTabToCsv(params: {
   tabName: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   metadata: {
     modelName: string;
     versionName: string;

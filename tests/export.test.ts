@@ -67,8 +67,9 @@ async function runTests() {
     });
     console.log('✅ Test 1: Simple P&L CSV export - PASSED');
     passed++;
-  } catch (error: any) {
-    console.error('❌ Test 1: Simple P&L CSV export - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Test 1: Simple P&L CSV export - FAILED:', errorMessage);
     failed++;
   }
 
@@ -82,8 +83,9 @@ async function runTests() {
     });
     console.log('✅ Test 2: Nested Balance Sheet CSV export - PASSED');
     passed++;
-  } catch (error: any) {
-    console.error('❌ Test 2: Nested Balance Sheet CSV export - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Test 2: Nested Balance Sheet CSV export - FAILED:', errorMessage);
     failed++;
   }
 
@@ -97,8 +99,9 @@ async function runTests() {
     });
     console.log('✅ Test 3: Simple P&L Excel export - PASSED');
     passed++;
-  } catch (error: any) {
-    console.error('❌ Test 3: Simple P&L Excel export - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Test 3: Simple P&L Excel export - FAILED:', errorMessage);
     failed++;
   }
 
@@ -112,8 +115,9 @@ async function runTests() {
     });
     console.log('✅ Test 4: Nested Balance Sheet Excel export - PASSED');
     passed++;
-  } catch (error: any) {
-    console.error('❌ Test 4: Nested Balance Sheet Excel export - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Test 4: Nested Balance Sheet Excel export - FAILED:', errorMessage);
     failed++;
   }
 
@@ -156,8 +160,9 @@ async function runTests() {
     });
     console.log('✅ Test 5: Comparison Excel export - PASSED');
     passed++;
-  } catch (error: any) {
-    console.error('❌ Test 5: Comparison Excel export - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Test 5: Comparison Excel export - FAILED:', errorMessage);
     failed++;
   }
 
@@ -176,8 +181,9 @@ async function runTests() {
     });
     console.log('✅ Test 6: Partial data export - PASSED');
     passed++;
-  } catch (error: any) {
-    console.error('❌ Test 6: Partial data export - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Test 6: Partial data export - FAILED:', errorMessage);
     failed++;
   }
 

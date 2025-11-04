@@ -2,12 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { logger } from '@/lib/logger';
 
 type Settings = {
   vat: { rate: number };
   numberFormat: { locale: 'en-US' | 'ar-SA'; decimals: 0 | 2; compact: boolean };
   validation: { requireTabs: string[]; bsTolerance: number };
   ui: { currency: string; theme: 'system' | 'light' | 'dark' };
+  // New time-series config (from admin_config)
+  fx?: { baseCurrency: string; rates: Record<string, number> };
+  cpi?: { baseYear: number; rates: Record<string, number> };
+  drivers?: { 2025?: Record<string, unknown>; 2026?: Record<string, unknown>; 2027?: Record<string, unknown> };
+  depreciation?: { method: string; rates: Record<string, number> };
+  rent_lease?: { baseRent: number; escalationRate: number };
+  governance?: { approvalRequired: boolean; maxVersions: number };
+  npv?: { discountRate: number };
+  cashEngine?: { maxIterations: number; tolerance: number; convergenceCheck: 'bs_cf_balance' | 'cash_balance' };
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -29,12 +39,23 @@ export default function AdminPage() {
 
   async function loadSettings() {
     try {
-      const res = await fetch('/api/settings');
-      if (!res.ok) throw new Error('Failed to load settings');
-      const data = await res.json();
-      setSettings(data);
+      // Load legacy settings
+      const legacyRes = await fetch('/api/settings');
+      const legacyData = legacyRes.ok ? await legacyRes.json() : {};
+      
+      // Load new admin config
+      const adminRes = await fetch('/api/admin/params');
+      const adminData = adminRes.ok ? await adminRes.json() : {};
+      
+      // Merge settings with defaults (admin config takes precedence)
+      const merged = {
+        ...DEFAULT_SETTINGS,
+        ...legacyData,
+        ...adminData,
+      } as Settings;
+      setSettings(merged);
     } catch (e) {
-      console.error('Load error:', e);
+      logger.error('Failed to load admin settings', e);
       toast.error('Failed to load settings');
     } finally {
       setLoading(false);
@@ -54,22 +75,61 @@ export default function AdminPage() {
 
     try {
       setSaving(true);
-      const res = await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changes),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
+      
+      // Separate legacy settings from new admin config
+      const legacyKeys = ['vat', 'numberFormat', 'validation', 'ui'] as const;
+      const legacyChanges: Partial<Settings> = {};
+      const adminChanges: Partial<Settings> = {};
+      
+      for (const key in changes) {
+        if (changes.hasOwnProperty(key)) {
+          const typedKey = key as keyof Settings;
+          const value = changes[typedKey];
+          if (value !== undefined) {
+            if (legacyKeys.includes(typedKey as any) && typedKey in DEFAULT_SETTINGS) {
+              (legacyChanges as any)[typedKey] = value;
+            } else {
+              (adminChanges as any)[typedKey] = value;
+            }
+          }
+        }
+      }
+      
+      // Save to both APIs
+      const promises = [];
+      if (Object.keys(legacyChanges).length > 0) {
+        promises.push(
+          fetch('/api/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(legacyChanges),
+          })
+        );
+      }
+      if (Object.keys(adminChanges).length > 0) {
+        promises.push(
+          fetch('/api/admin/params', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adminChanges),
+          })
+        );
+      }
+      
+      const results = await Promise.all(promises);
+      const errors = results.filter((r) => !r.ok);
+      
+      if (errors.length > 0) {
+        const error = await errors[0].json();
         throw new Error(error.error || 'Failed to save');
       }
 
       setChanges({});
       toast.success('Settings saved successfully');
-    } catch (e: any) {
-      console.error('Save error:', e);
-      toast.error(e.message || 'Failed to save settings');
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Failed to save settings';
+      logger.error('Failed to save admin settings', e, { changes: Object.keys(changes) });
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -81,88 +141,116 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <main className="p-6">
-        <div className="text-center text-gray-500">Loading settings...</div>
-      </main>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-12">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-600 dark:text-slate-400">Loading settings...</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <main className="p-6 max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center justify-between border-b pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Admin Settings</h1>
-          <p className="text-sm text-gray-500">Manage application parameters</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Admin Settings</h1>
+            <p className="text-slate-600 dark:text-slate-400">Manage application parameters and configuration</p>
+          </div>
+          {Object.keys(changes).length > 0 && (
+            <button
+              onClick={saveSettings}
+              disabled={saving}
+              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium shadow-sm hover:shadow-md hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>💾</span>
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
-        {Object.keys(changes).length > 0 && (
-          <button
-            onClick={saveSettings}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        )}
       </div>
 
-      {/* VAT Settings */}
-      <section className="border rounded-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">VAT</h2>
-          <button
-            onClick={() => resetSection('vat')}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Reset to default
-          </button>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">VAT Rate</label>
-          <input
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            value={settings.vat.rate}
-            onChange={(e) => updateSetting('vat', { rate: parseFloat(e.target.value) || 0 })}
-            className="w-full px-3 py-2 border rounded-lg"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Enter as decimal (0.15 = 15%)
-          </p>
-        </div>
-      </section>
-
-      {/* Number Format Settings */}
-      <section className="border rounded-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Number Format</h2>
-          <button
-            onClick={() => resetSection('numberFormat')}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Reset to default
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Locale</label>
-            <select
-              value={settings.numberFormat.locale}
-              onChange={(e) =>
-                updateSetting('numberFormat', {
-                  ...settings.numberFormat,
-                  locale: e.target.value as 'en-US' | 'ar-SA',
-                })
-              }
-              className="w-full px-3 py-2 border rounded-lg"
+      <div className="space-y-6">
+        {/* VAT Settings */}
+        <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs">
+                %
+              </span>
+              VAT Settings
+            </h2>
+            <button
+              onClick={() => resetSection('vat')}
+              className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
             >
+              Reset to default
+            </button>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">VAT Rate</label>
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value={settings.vat.rate}
+              onChange={(e) => updateSetting('vat', { rate: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Enter as decimal (0.15 = 15%)
+            </p>
+          </div>
+        </section>
+
+        {/* Number Format Settings */}
+        <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-xs">
+                #
+              </span>
+              Number Format
+            </h2>
+            <button
+              onClick={() => resetSection('numberFormat')}
+              className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              Reset to default
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Locale</label>
+              <select
+                value={settings.numberFormat.locale}
+                onChange={(e) =>
+                  updateSetting('numberFormat', {
+                    ...settings.numberFormat,
+                    locale: e.target.value as 'en-US' | 'ar-SA',
+                  })
+                }
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+              >
               <option value="en-US">English (US)</option>
               <option value="ar-SA">Arabic (SA)</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Decimal Places</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Decimal Places</label>
             <select
               value={settings.numberFormat.decimals}
               onChange={(e) =>
@@ -171,7 +259,7 @@ export default function AdminPage() {
                   decimals: parseInt(e.target.value) as 0 | 2,
                 })
               }
-              className="w-full px-3 py-2 border rounded-lg"
+              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
             >
               <option value="0">0</option>
               <option value="2">2</option>
@@ -191,99 +279,109 @@ export default function AdminPage() {
             }
             className="w-4 h-4"
           />
-          <label htmlFor="compact" className="text-sm">
+          <label htmlFor="compact" className="text-sm text-slate-700 dark:text-slate-300">
             Use compact notation (e.g., 1.2K, 1.5M)
           </label>
         </div>
       </section>
 
-      {/* Validation Settings */}
-      <section className="border rounded-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Validation Rules</h2>
-          <button
-            onClick={() => resetSection('validation')}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Reset to default
-          </button>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">Required Tabs</label>
-          <input
-            type="text"
-            value={settings.validation.requireTabs.join(', ')}
-            onChange={(e) =>
-              updateSetting('validation', {
-                ...settings.validation,
-                requireTabs: e.target.value
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-              })
-            }
-            className="w-full px-3 py-2 border rounded-lg"
-            placeholder="overview, pnl, bs, cf"
-          />
-          <p className="text-xs text-gray-500 mt-1">Comma-separated list</p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">Balance Sheet Tolerance</label>
-          <input
-            type="number"
-            min="0"
-            step="0.001"
-            value={settings.validation.bsTolerance}
-            onChange={(e) =>
-              updateSetting('validation', {
-                ...settings.validation,
-                bsTolerance: parseFloat(e.target.value) || 0,
-              })
-            }
-            className="w-full px-3 py-2 border rounded-lg"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Maximum difference allowed (default: 0.01)
-          </p>
-        </div>
-      </section>
-
-      {/* UI Settings */}
-      <section className="border rounded-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">UI Settings</h2>
-          <button
-            onClick={() => resetSection('ui')}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Reset to default
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Currency</label>
-            <input
-              type="text"
-              value={settings.ui.currency}
-              onChange={(e) =>
-                updateSetting('ui', { ...settings.ui, currency: e.target.value })
-              }
-              className="w-full px-3 py-2 border rounded-lg"
-              placeholder="SAR"
-            />
+        {/* Validation Settings */}
+        <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center text-white text-xs">
+                ✓
+              </span>
+              Validation Rules
+            </h2>
+            <button
+              onClick={() => resetSection('validation')}
+              className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              Reset to default
+            </button>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Theme</label>
-            <select
-              value={settings.ui.theme}
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Required Tabs</label>
+            <input
+              type="text"
+              value={settings.validation.requireTabs.join(', ')}
               onChange={(e) =>
-                updateSetting('ui', {
-                  ...settings.ui,
-                  theme: e.target.value as 'system' | 'light' | 'dark',
+                updateSetting('validation', {
+                  ...settings.validation,
+                  requireTabs: e.target.value
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean),
                 })
               }
-              className="w-full px-3 py-2 border rounded-lg"
+              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+              placeholder="overview, pnl, bs, cf"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Comma-separated list</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Balance Sheet Tolerance</label>
+            <input
+              type="number"
+              min="0"
+              step="0.001"
+              value={settings.validation.bsTolerance}
+              onChange={(e) =>
+                updateSetting('validation', {
+                  ...settings.validation,
+                  bsTolerance: parseFloat(e.target.value) || 0,
+                })
+              }
+              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Maximum difference allowed (default: 0.01)
+            </p>
+          </div>
+        </section>
+
+        {/* UI Settings */}
+        <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-xs">
+                🎨
+              </span>
+              UI Settings
+            </h2>
+            <button
+              onClick={() => resetSection('ui')}
+              className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
             >
+              Reset to default
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Currency</label>
+              <input
+                type="text"
+                value={settings.ui.currency}
+                onChange={(e) =>
+                  updateSetting('ui', { ...settings.ui, currency: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+                placeholder="SAR"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Theme</label>
+              <select
+                value={settings.ui.theme}
+                onChange={(e) =>
+                  updateSetting('ui', {
+                    ...settings.ui,
+                    theme: e.target.value as 'system' | 'light' | 'dark',
+                  })
+                }
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+              >
               <option value="system">System</option>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
@@ -292,19 +390,148 @@ export default function AdminPage() {
         </div>
       </section>
 
-      {/* Save Button (repeat for mobile) */}
-      {Object.keys(changes).length > 0 && (
-        <div className="sticky bottom-0 bg-white border-t p-4">
-          <button
-            onClick={saveSettings}
-            disabled={saving}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save All Changes'}
-          </button>
-        </div>
-      )}
-    </main>
+        {/* Cash Engine Config */}
+        {settings.cashEngine && (
+          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-xs">
+                  ⚙️
+                </span>
+                Cash Engine Configuration
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Max Iterations</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={settings.cashEngine.maxIterations || 3}
+                  onChange={(e) =>
+                    updateSetting('cashEngine', {
+                      ...settings.cashEngine!,
+                      maxIterations: parseInt(e.target.value) || 3,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tolerance</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={settings.cashEngine.tolerance || 0.01}
+                  onChange={(e) =>
+                    updateSetting('cashEngine', {
+                      ...settings.cashEngine!,
+                      tolerance: parseFloat(e.target.value) || 0.01,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Convergence Check</label>
+                <select
+                  value={settings.cashEngine.convergenceCheck || 'bs_cf_balance'}
+                  onChange={(e) =>
+                    updateSetting('cashEngine', {
+                      ...settings.cashEngine!,
+                      convergenceCheck: e.target.value as 'bs_cf_balance' | 'cash_balance',
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+                >
+                  <option value="bs_cf_balance">Balance Sheet = Cash Flow</option>
+                  <option value="cash_balance">Cash Balance</option>
+                </select>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* NPV Settings */}
+        {settings.npv && (
+          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs">
+                  📊
+                </span>
+                NPV Discount Rate
+              </h2>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Discount Rate (0-1)</label>
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.001"
+                value={settings.npv.discountRate || 0.1}
+                onChange={(e) =>
+                  updateSetting('npv', {
+                    ...settings.npv!,
+                    discountRate: parseFloat(e.target.value) || 0.1,
+                  })
+                }
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+              />
+            </div>
+          </section>
+        )}
+
+        {/* Governance Rules */}
+        {settings.governance && (
+          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white text-xs">
+                  🔒
+                </span>
+                Governance Rules
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={settings.governance.approvalRequired || false}
+                  onChange={(e) =>
+                    updateSetting('governance', {
+                      ...settings.governance!,
+                      approvalRequired: e.target.checked,
+                    })
+                  }
+                  className="w-4 h-4 rounded border-slate-300 dark:border-slate-600"
+                />
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Approval Required</label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Max Versions</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={settings.governance.maxVersions || 10}
+                  onChange={(e) =>
+                    updateSetting('governance', {
+                      ...settings.governance!,
+                      maxVersions: parseInt(e.target.value) || 10,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all"
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+      </div>
+    </div>
   );
 }
 

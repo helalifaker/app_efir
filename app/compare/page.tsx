@@ -6,6 +6,7 @@ import { formatNumber } from '@/lib/utils';
 import { downloadCsv, arrayToCsv } from '@/lib/csv';
 import { exportCompareToExcel } from '@/lib/xlsx';
 import toast from 'react-hot-toast';
+import { logger } from '@/lib/logger';
 
 type VersionOption = {
   id: string;
@@ -15,9 +16,9 @@ type VersionOption = {
 };
 
 type VersionData = {
-  pnl: Record<string, any>;
-  bs: Record<string, any>;
-  cf: Record<string, any>;
+  pnl: Record<string, unknown>;
+  bs: Record<string, unknown>;
+  cf: Record<string, unknown>;
 };
 
 function CompareContent() {
@@ -37,10 +38,26 @@ function CompareContent() {
     async function loadVersions() {
       try {
         const res = await fetch('/api/compare/versions');
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: 'Failed to load versions' }));
+          logger.error('Failed to load versions for compare', undefined, {
+            status: res.status,
+            statusText: res.statusText,
+            error: errorData.error,
+          });
+          return;
+        }
         const data = await res.json();
         setAllVersions(data.versions || []);
       } catch (e) {
-        console.error('Failed to load versions:', e);
+        // Only log if it's not a network error (which is expected during development)
+        if (e instanceof TypeError && e.message === 'Failed to fetch') {
+          logger.warn('Network error loading versions (API may not be available)', {
+            message: 'This may be expected if the dev server just started',
+          });
+        } else {
+          logger.error('Failed to load versions for compare', e);
+        }
       } finally {
         setLoading(false);
       }
@@ -89,7 +106,7 @@ function CompareContent() {
           setAllKeys(data.allKeys);
         }
       } catch (e) {
-        console.error('Failed to load compare data:', e);
+        logger.error('Failed to load compare data', e, { selectedIds, baselineId });
       }
     }
 
@@ -143,7 +160,7 @@ function CompareContent() {
         };
       });
 
-      const dataByVersion: Record<string, Record<string, any>> = {};
+      const dataByVersion: Record<string, Record<string, unknown>> = {};
       selectedIds.forEach(id => {
         dataByVersion[id] = compareData[id]?.[activeTab] || {};
       });
@@ -202,9 +219,10 @@ function CompareContent() {
         downloadCsv(csvContent, `compare_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`);
         toast.success(`${activeTab.toUpperCase()} comparison exported to CSV`);
       }
-    } catch (error: any) {
-      console.error('Export error:', error);
-      toast.error(`Failed to export: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export';
+      logger.error('Compare export failed', error, { activeTab, selectedIds });
+      toast.error(errorMessage);
     }
   };
 

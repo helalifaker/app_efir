@@ -4,7 +4,7 @@
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
-export async function removeValidations(versionId: string, request: any) {
+export async function removeValidations(_versionId: string, _request: unknown) {
   // Use direct Supabase client in test environment
   // For now, we'll add the missing tabs to fix validation instead
   // This is a workaround since we don't have a delete validations endpoint
@@ -14,7 +14,7 @@ export async function addTab(
   versionId: string,
   tab: string,
   data: Record<string, unknown>,
-  request: any
+  request: { post: (url: string, options?: { data?: unknown; failOnStatusCode?: boolean }) => Promise<{ ok: () => boolean }> }
 ) {
   // Try to add tab via API if endpoint exists
   // Otherwise, we'll need to use service key directly
@@ -38,7 +38,7 @@ export async function addTab(
 export async function setVersionStatus(
   versionId: string,
   status: 'draft' | 'ready' | 'locked',
-  request: any
+  request: { post: (url: string, options?: { data?: unknown; failOnStatusCode?: boolean }) => Promise<{ ok: () => boolean }>; patch: (url: string, options?: { data?: unknown; failOnStatusCode?: boolean }) => Promise<{ ok: () => boolean }> }
 ) {
   const response = await request.patch(`${BASE_URL}/api/versions/${versionId}/status`, {
     data: { status },

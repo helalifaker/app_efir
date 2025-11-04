@@ -37,7 +37,7 @@ const sampleBsData = {
 };
 
 // Replicate jsonToRows logic for testing
-function jsonToRows(data: Record<string, any>, prefix = ''): Array<{ key: string; value: string | number }> {
+function jsonToRows(data: Record<string, unknown>, prefix = ''): Array<{ key: string; value: string | number }> {
   const rows: Array<{ key: string; value: string | number }> = [];
   const keys = Object.keys(data).sort(); // Stable ordering
   
@@ -98,8 +98,9 @@ function runTests() {
     } else {
       throw new Error(`Expected ${expectedOrder}, got ${keys}`);
     }
-  } catch (error: any) {
-    console.error('❌ Test 1: Simple P&L ordering - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Test 1: Simple P&L ordering - FAILED:', errorMessage);
     failed++;
   }
 
@@ -127,8 +128,9 @@ function runTests() {
     } else {
       throw new Error(`Missing keys. Expected ${expectedKeys.length}, got ${keys.length}`);
     }
-  } catch (error: any) {
-    console.error('❌ Test 2: Nested BS flattening - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Test 2: Nested BS flattening - FAILED:', errorMessage);
     failed++;
   }
 
@@ -159,8 +161,9 @@ function runTests() {
     } else {
       throw new Error(`Array flattening failed. Got: ${keys.join(', ')}`);
     }
-  } catch (error: any) {
-    console.error('❌ Test 3: Array handling - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Test 3: Array handling - FAILED:', errorMessage);
     failed++;
   }
 
@@ -182,8 +185,9 @@ function runTests() {
     } else {
       throw new Error(`Expected 2 null values, got ${nullRows.length}`);
     }
-  } catch (error: any) {
-    console.error('❌ Test 4: Null/undefined handling - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Test 4: Null/undefined handling - FAILED:', errorMessage);
     failed++;
   }
 
@@ -198,8 +202,9 @@ function runTests() {
     } else {
       throw new Error(`Expected 0 rows, got ${rows.length}`);
     }
-  } catch (error: any) {
-    console.error('❌ Test 5: Empty object handling - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Test 5: Empty object handling - FAILED:', errorMessage);
     failed++;
   }
 
@@ -218,8 +223,9 @@ function runTests() {
     } else {
       throw new Error(`Expected comma-separated string, got ${tagRow?.value}`);
     }
-  } catch (error: any) {
-    console.error('❌ Test 6: Simple array handling - FAILED:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Test 6: Simple array handling - FAILED:', errorMessage);
     failed++;
   }
 

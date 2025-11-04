@@ -10,11 +10,13 @@ import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TabType, tabSchemas } from '@/lib/schemas/tabs';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 type TabEditorProps = {
   versionId: string;
   tab: TabType;
-  initialData: Record<string, any>;
+  initialData: Record<string, unknown>;
   metadata: {
     modelName: string;
     versionName: string;
@@ -42,6 +44,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export default function TabEditor({ versionId, tab, initialData }: TabEditorProps) {
   const router = useRouter();
+  const { session, loading: authLoading } = useAuth();
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -55,7 +58,6 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
     watch,
     reset,
   } = useForm({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(schema as any),
     defaultValues: initialData,
     mode: 'onChange',
@@ -67,6 +69,11 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
 
   // Autosave when debounced values change
   useEffect(() => {
+    // Don't autosave if user is not authenticated
+    if (authLoading || !session) {
+      return;
+    }
+    
     if (isDirty && Object.keys(debouncedValues).length > 0) {
       // Only autosave if form is valid (no errors)
       if (Object.keys(errors).length === 0) {
@@ -74,10 +81,18 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedValues, isDirty, errors]);
+  }, [debouncedValues, isDirty, errors, session, authLoading]);
 
-  const saveTab = useCallback(async (data: Record<string, any>) => {
+  const saveTab = useCallback(async (data: Record<string, unknown>) => {
     if (saving) return;
+    
+    // Check authentication before attempting save
+    if (!session) {
+      toast.error('Please log in to save changes', {
+        duration: 5000,
+      });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -88,29 +103,62 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        console.error('Tab save error:', { status: res.status, error, versionId, tab });
+        const error = await res.json().catch(() => ({ error: 'Failed to save' }));
         
-        // Show detailed error message
+        // Handle authentication errors specially
+        if (res.status === 401) {
+          toast.error(
+            (t) => (
+              <div onClick={() => { window.location.href = '/login'; toast.dismiss(t.id); }}>
+                <div className="font-semibold">Authentication Required</div>
+                <div className="text-sm mt-1">Please log in to save changes</div>
+                <div className="text-xs mt-1 underline">Click to go to login →</div>
+              </div>
+            ),
+            { duration: 5000 }
+          );
+          logger.warn('Tab save failed - authentication required', {
+            versionId,
+            tab,
+          });
+          return;
+        }
+        
+        logger.error('Tab save failed', undefined, {
+          versionId,
+          tab,
+          httpStatus: res.status,
+          error: error.error,
+        });
+        
+        // Show detailed error message for other errors
         let errorMessage = error.error || 'Failed to save';
         if (error.details && Array.isArray(error.details) && error.details.length > 0) {
-          const detailMessages = error.details.map((d: any) => d.message || d).join(', ');
+          const detailMessages = error.details.map((d: unknown) => {
+            if (typeof d === 'object' && d !== null && 'message' in d) {
+              return String((d as { message: string }).message);
+            }
+            return String(d);
+          }).join(', ');
           errorMessage = `${errorMessage}: ${detailMessages}`;
         }
         
         toast.error(`Failed to save ${tab.toUpperCase()}: ${errorMessage}`);
-        return; // Don't throw, just show error and stop
+        return;
       }
 
       const result = await res.json();
       reset(result.data, { keepDirty: false });
       setLastSaved(new Date());
       
+      logger.debug('Tab saved successfully', { versionId, tab });
+      
       // Refresh to show updated data
       router.refresh();
-    } catch (error: any) {
-      console.error('Unexpected save error:', error);
-      toast.error(`Failed to save ${tab.toUpperCase()}: ${error.message || 'Unknown error'}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Unexpected error during tab save', error, { versionId, tab });
+      toast.error(`Failed to save ${tab.toUpperCase()}: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -119,12 +167,13 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
   // Extract field names from schema (simplified - show common fields)
   const getFieldNames = (): string[] => {
     const commonFields: Record<TabType, string[]> = {
+      assumptions: ['notes', 'key_assumptions'],
       overview: ['summary', 'description', 'period', 'fiscal_year', 'notes'],
       pnl: ['revenue', 'students_count', 'avg_tuition_fee', 'cost_of_sales', 'operating_expenses', 'ebit', 'net_income'],
       bs: ['assets', 'assets_current', 'assets_fixed', 'cash', 'receivables', 'equity', 'liabilities'],
       cf: ['operating', 'investing', 'financing', 'beginning_cash', 'ending_cash'],
       capex: ['total_capex', 'planned_capex', 'actual_capex'],
-      controls: ['status', 'last_check', 'notes'],
+      validation: ['status', 'last_check', 'notes'],
     };
 
     return commonFields[tab] || Object.keys(initialData).slice(0, 10);
@@ -134,16 +183,17 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
 
   // Derived fields (read-only, computed by server)
   const derivedFields: Record<TabType, string[]> = {
+    assumptions: [],
     overview: [],
     pnl: ['gross_profit', 'ebitda', 'margin_percentage'],
     bs: [],
     cf: ['net_change'],
     capex: [],
-    controls: [],
+    validation: [],
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <form onSubmit={handleSubmit((data) => saveTab(data))} className="space-y-3">
         {fieldNames.map((fieldName) => {
           const value = formValues[fieldName];
@@ -151,17 +201,21 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
           const isDerived = derivedFields[tab]?.includes(fieldName);
 
           return (
-            <div key={fieldName} className="space-y-1">
-              <label className="block text-xs font-medium text-gray-700">
+            <div key={fieldName} className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 {fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                {isDerived && <span className="ml-1 text-gray-400">(calculated)</span>}
+                {isDerived && (
+                  <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded font-normal">
+                    calculated
+                  </span>
+                )}
               </label>
               {isDerived ? (
                 <input
                   type="text"
                   value={value ?? ''}
                   readOnly
-                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-gray-50 text-gray-600"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 font-mono"
                 />
               ) : (
                 <>
@@ -171,15 +225,16 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
                     {...register(fieldName, {
                       valueAsNumber: typeof value === 'number',
                     })}
-                    className={`w-full px-2 py-1 text-xs border rounded ${
+                    className={`w-full px-3 py-2 text-sm border rounded-lg transition-all ${
                       fieldError
-                        ? 'border-red-300 bg-red-50'
-                        : 'border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
+                        ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:focus:ring-red-800'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800'
                     }`}
                   />
                   {fieldError && (
-                    <p className="text-[10px] text-red-600">
-                      {fieldError.message as string}
+                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <span>⚠</span>
+                      <span>{fieldError.message as string}</span>
                     </p>
                   )}
                 </>
@@ -197,8 +252,8 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
             const fieldError = errors[fieldName];
 
             return (
-              <div key={fieldName} className="space-y-1">
-                <label className="block text-xs font-medium text-gray-700">
+              <div key={fieldName} className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   {fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                 </label>
                 <input
@@ -207,15 +262,16 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
                   {...register(fieldName, {
                     valueAsNumber: typeof value === 'number',
                   })}
-                  className={`w-full px-2 py-1 text-xs border rounded ${
+                  className={`w-full px-3 py-2 text-sm border rounded-lg transition-all ${
                     fieldError
-                      ? 'border-red-300 bg-red-50'
-                      : 'border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
+                      ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:focus:ring-red-800'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800'
                   }`}
                 />
                 {fieldError && (
-                  <p className="text-[10px] text-red-600">
-                    {fieldError.message as string}
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <span>⚠</span>
+                    <span>{fieldError.message as string}</span>
                   </p>
                 )}
               </div>
@@ -224,19 +280,31 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
       </form>
 
       {/* Status bar */}
-      <div className="flex items-center justify-between text-[10px] text-gray-500 pt-2 border-t">
+      <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
-          {saving && <span className="text-blue-600">Saving...</span>}
-          {!saving && isDirty && <span className="text-yellow-600">Unsaved changes</span>}
+          {saving && (
+            <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+              <span className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
+              <span>Saving...</span>
+            </span>
+          )}
+          {!saving && isDirty && (
+            <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+              <span>⚠</span>
+              <span>Unsaved changes</span>
+            </span>
+          )}
           {!saving && !isDirty && lastSaved && (
-            <span className="text-green-600">
-              Saved {lastSaved.toLocaleTimeString()}
+            <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+              <span>✓</span>
+              <span>Saved {lastSaved.toLocaleTimeString()}</span>
             </span>
           )}
         </div>
         {Object.keys(errors).length > 0 && (
-          <span className="text-red-600">
-            {Object.keys(errors).length} error(s)
+          <span className="text-red-600 dark:text-red-400 flex items-center gap-1">
+            <span>⚠</span>
+            <span>{Object.keys(errors).length} error(s)</span>
           </span>
         )}
       </div>

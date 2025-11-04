@@ -12,10 +12,10 @@ export default async function FinancialReportPage({
   const { version, tabs } = await getVersionWithTabs(id);
   const settings = await getSettings();
 
-  const tabOrder = ['assumptions', 'overview', 'pnl', 'bs', 'cf', 'capex', 'controls'];
+  const tabOrder = ['assumptions', 'overview', 'pnl', 'bs', 'cf', 'capex', 'validation'];
   
   // Format currency using admin settings
-  const formatCurrency = (value: any): string => {
+  const formatCurrency = (value: unknown): string => {
     if (value === null || value === undefined) return 'N/A';
     if (typeof value === 'number') {
       const { locale, decimals, compact } = settings.numberFormat;
@@ -34,7 +34,7 @@ export default async function FinancialReportPage({
     return String(value);
   };
 
-  const formatJsonForPrint = (data: any): string => {
+  const formatJsonForPrint = (data: unknown): string => {
     if (!data || typeof data !== 'object') return 'N/A';
     return JSON.stringify(data, null, 2);
   };
@@ -71,8 +71,8 @@ export default async function FinancialReportPage({
 
       {/* Sections */}
       {tabOrder.map((tabKey, idx) => {
-        const tab = (tabs as any)?.[tabKey];
-        const data = tab?.data || {};
+        const tab = tabs?.[tabKey as keyof typeof tabs];
+        const data = (tab?.data || {}) as Record<string, unknown>;
         
         // Skip assumptions if no data exists
         if (tabKey === 'assumptions' && (!data || Object.keys(data).length === 0)) {
@@ -88,7 +88,7 @@ export default async function FinancialReportPage({
                tabKey === 'capex' ? 'CAPEX' :
                tabKey === 'assumptions' ? 'Assumptions' :
                tabKey === 'overview' ? 'Overview' :
-               tabKey === 'controls' ? 'Controls' :
+               tabKey === 'validation' ? 'Validation' :
                tabKey}
             </h2>
 
@@ -181,16 +181,16 @@ export default async function FinancialReportPage({
               <div className="text-sm">
                 {data.projects && Array.isArray(data.projects) ? (
                   <div className="space-y-3">
-                    {data.projects.map((project: any, i: number) => (
+                    {data.projects.map((project: Record<string, unknown>, i: number) => (
                       <div key={i} className="border rounded p-3">
-                        {project.name && <div className="font-semibold mb-1">{project.name}</div>}
-                        {project.amount !== undefined && (
+                        {project.name ? <div className="font-semibold mb-1">{String(project.name)}</div> : null}
+                        {project.amount !== undefined ? (
                           <div className="flex justify-between">
                             <span>Amount</span>
                             <span className="currency">{formatCurrency(project.amount)}</span>
                           </div>
-                        )}
-                        {project.status && <div className="text-xs text-gray-600 mt-1">Status: {project.status}</div>}
+                        ) : null}
+                        {project.status ? <div className="text-xs text-gray-600 mt-1">Status: {String(project.status)}</div> : null}
                       </div>
                     ))}
                   </div>
@@ -200,7 +200,7 @@ export default async function FinancialReportPage({
               </div>
             )}
 
-            {(tabKey === 'controls' || tabKey === 'assumptions') && (
+            {(tabKey === 'validation' || tabKey === 'assumptions') && (
               <div className="text-sm">
                 <pre className="bg-gray-50 p-4 rounded border font-mono whitespace-pre-wrap">{formatJsonForPrint(data)}</pre>
               </div>

@@ -2,18 +2,15 @@
 // GET and PATCH endpoints for version tab data with schema validation
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { UuidSchema } from '@/lib/validateRequest';
 import { validateTabData, TabType } from '@/lib/schemas/tabs';
 import { derivePnl, deriveBs, deriveCf } from '@/lib/derive';
 import { logger } from '@/lib/logger';
 import { withErrorHandler } from '@/lib/withErrorHandler';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
-);
+import { runCashEngineForVersion } from '@/lib/engine/cashEngineService';
+import { getServiceClient } from '@/lib/supabaseServer';
+import { verifyVersionOwnership, getCurrentUserId } from '@/lib/ownership';
 
 // PATCH body schema
 const PatchTabSchema = z.object({
@@ -22,9 +19,13 @@ const PatchTabSchema = z.object({
 
 export const GET = withErrorHandler(async (
   _: Request,
-  ctx: { params: Promise<{ id: string; tab: string }> }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
-  const { id, tab } = await ctx.params;
+  if (!ctx?.params) {
+    return NextResponse.json({ error: 'Missing route parameters' }, { status: 400 });
+  }
+  const params = await ctx.params;
+  const { id, tab } = params as { id: string; tab: string };
 
   // Validate UUID
   const uuidValidation = UuidSchema.safeParse(id);
@@ -36,13 +37,22 @@ export const GET = withErrorHandler(async (
   }
 
   // Validate tab type
-  const validTabs: TabType[] = ['overview', 'pnl', 'bs', 'cf', 'capex', 'controls'];
+  const validTabs: TabType[] = ['assumptions', 'overview', 'pnl', 'bs', 'cf', 'capex', 'validation'];
   if (!validTabs.includes(tab as TabType)) {
     return NextResponse.json(
       { error: `Invalid tab type. Must be one of: ${validTabs.join(', ')}` },
       { status: 400 }
     );
   }
+
+  // Verify ownership
+  const userId = await getCurrentUserId();
+  const ownershipCheck = await verifyVersionOwnership(id, userId);
+  if (!ownershipCheck.owned) {
+    return ownershipCheck.error || NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const supabase = getServiceClient();
 
   // Fetch tab data
   const { data: tabRow, error } = await supabase
@@ -69,9 +79,13 @@ export const GET = withErrorHandler(async (
 
 export const PATCH = withErrorHandler(async (
   req: Request,
-  ctx: { params: Promise<{ id: string; tab: string }> }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
-  const { id, tab } = await ctx.params;
+  if (!ctx?.params) {
+    return NextResponse.json({ error: 'Missing route parameters' }, { status: 400 });
+  }
+  const params = await ctx.params;
+  const { id, tab } = params as { id: string; tab: string };
 
   // Validate UUID
   const uuidValidation = UuidSchema.safeParse(id);
@@ -90,13 +104,22 @@ export const PATCH = withErrorHandler(async (
   }
 
   // Validate tab type
-  const validTabs: TabType[] = ['overview', 'pnl', 'bs', 'cf', 'capex', 'controls'];
+  const validTabs: TabType[] = ['assumptions', 'overview', 'pnl', 'bs', 'cf', 'capex', 'validation'];
   if (!validTabs.includes(tab as TabType)) {
     return NextResponse.json(
       { error: `Invalid tab type. Must be one of: ${validTabs.join(', ')}` },
       { status: 400 }
     );
   }
+
+  // Verify ownership
+  const userId = await getCurrentUserId();
+  const ownershipCheck = await verifyVersionOwnership(id, userId);
+  if (!ownershipCheck.owned) {
+    return ownershipCheck.error || NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const supabase = getServiceClient();
 
   // Parse and validate body
   let body;
@@ -173,6 +196,26 @@ export const PATCH = withErrorHandler(async (
   }
 
   logger.info('Tab updated', { versionId: id, tab });
+
+  // Auto-trigger cash engine if P&L, BS, or CF tab was updated
+  // Run asynchronously (don't block response)
+  if (['pnl', 'bs', 'cf'].includes(tab)) {
+    // Check version status - only run for Draft/Ready (not Locked)
+    const { data: version } = await supabase
+      .from('model_versions')
+      .select('status')
+      .eq('id', id)
+      .single();
+
+    if (version && version.status !== 'Locked' && version.status !== 'Archived') {
+      // Trigger cash engine asynchronously (fire and forget)
+      runCashEngineForVersion(id, { forceRecalculation: false }).catch((error) => {
+        logger.error('Auto-triggered cash engine failed', error, { versionId: id, tab });
+        // Don't throw - this is a background process
+      });
+    }
+  }
+
   return NextResponse.json({ data: tabRow?.data || {} });
 });
 

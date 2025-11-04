@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache';
 import { revalidateTag } from 'next/cache';
 import { getServiceClient } from './supabaseServer';
 import { resolveUsers } from './resolveUser';
+import { logger } from './logger';
 
 // Internal function without caching (for mutations to call)
 async function _getVersionWithTabs(versionId: string) {
@@ -18,7 +19,7 @@ async function _getVersionWithTabs(versionId: string) {
     .maybeSingle();
 
   if (vErr) {
-    console.error('VERSION QUERY ERROR', vErr);
+    logger.error('Version query error', vErr, { versionId, operation: 'get_version_with_tabs' });
     throw vErr;
   }
 
@@ -36,7 +37,7 @@ async function _getVersionWithTabs(versionId: string) {
     .maybeSingle();
 
   if (mErr) {
-    console.error('MODEL QUERY ERROR', mErr);
+    logger.error('Model query error', mErr, { modelId: version.model_id, versionId, operation: 'get_version_with_tabs' });
     throw mErr;
   }
 
@@ -50,7 +51,7 @@ async function _getVersionWithTabs(versionId: string) {
     .order('tab');
 
   if (tErr) {
-    console.error('TABS QUERY ERROR', tErr);
+    logger.error('Tabs query error', tErr, { versionId, operation: 'get_version_with_tabs' });
     throw tErr;
   }
 
@@ -64,7 +65,7 @@ async function _getVersionWithTabs(versionId: string) {
     .order('created_at', { ascending: false });
 
   if (valErr) {
-    console.error('VALIDATIONS QUERY ERROR', valErr);
+    logger.error('Validations query error', valErr, { versionId, operation: 'get_version_with_tabs' });
     throw valErr;
   }
 
@@ -79,23 +80,40 @@ async function _getVersionWithTabs(versionId: string) {
     .limit(50);
 
   if (histErr) {
-    console.error('HISTORY QUERY ERROR', histErr);
+    logger.error('History query error', histErr, { versionId, operation: 'get_version_with_tabs' });
     throw histErr;
   }
 
   // Resolve user IDs to emails/names
-  const userIds = (history || []).map((h: any) => h.changed_by).filter(Boolean);
+  type HistoryItem = {
+    id: string;
+    old_status: string;
+    new_status: string;
+    changed_by: string | null;
+    note: string | null;
+    changed_at: string;
+  };
+  
+  const userIds = (history || []).map((h: HistoryItem) => h.changed_by).filter(Boolean) as string[];
   const userMap = await resolveUsers(userIds);
   
   // Add resolved names to history items
-  const enrichedHistory = (history || []).map((h: any) => ({
+  const enrichedHistory = (history || []).map((h: HistoryItem) => ({
     ...h,
     changed_by_name: h.changed_by ? (userMap[h.changed_by] || 'System') : 'System',
   }));
 
   // turn tabs[] → { overview: {...}, pnl: {...}, ... }
-  const tabByKey: Record<string, any> = {};
-  (tabs || []).forEach((t) => {
+  type TabItem = {
+    id: string;
+    version_id: string;
+    tab: string;
+    data: unknown;
+    updated_at: string;
+  };
+  
+  const tabByKey: Record<string, TabItem> = {};
+  (tabs || []).forEach((t: TabItem) => {
     tabByKey[t.tab] = t;
   });
 

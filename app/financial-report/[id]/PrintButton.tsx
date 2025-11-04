@@ -15,7 +15,7 @@ export default function PrintButton({ versionId }: { versionId: string }) {
           📄 Download PDF / Print
         </button>
         <a
-          href={`/version-detail/${versionId}`}
+          href={`/versions/${versionId}`}
           className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           ← Back to Version

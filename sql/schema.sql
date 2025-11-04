@@ -37,8 +37,12 @@ CREATE TABLE IF NOT EXISTS public.model_versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   model_id uuid NOT NULL REFERENCES public.models(id) ON DELETE CASCADE,
   name text NOT NULL,
-  status text NOT NULL CHECK (status IN ('draft', 'ready', 'locked')),
+  status text NOT NULL CHECK (status IN ('Draft', 'Ready', 'Locked', 'Archived')),
   created_by uuid, -- references auth.users(id)
+  override_flag boolean NOT NULL DEFAULT false,
+  override_reason text,
+  override_by uuid, -- references auth.users(id)
+  archived_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -47,6 +51,8 @@ CREATE INDEX IF NOT EXISTS idx_model_versions_model_id ON public.model_versions(
 CREATE INDEX IF NOT EXISTS idx_model_versions_status ON public.model_versions(status);
 CREATE INDEX IF NOT EXISTS idx_model_versions_created_at ON public.model_versions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_model_versions_created_by ON public.model_versions(created_by);
+CREATE INDEX IF NOT EXISTS idx_model_versions_override_flag ON public.model_versions(override_flag);
+CREATE INDEX IF NOT EXISTS idx_model_versions_archived_at ON public.model_versions(archived_at);
 
 -- ============================================================================
 -- 3. VERSION_TABS TABLE (JSONB data for each tab)
@@ -72,7 +78,7 @@ CREATE TABLE IF NOT EXISTS public.version_validations (
   version_id uuid NOT NULL REFERENCES public.model_versions(id) ON DELETE CASCADE,
   code text NOT NULL,
   message text NOT NULL,
-  severity text NOT NULL CHECK (severity IN ('error', 'warning')),
+  severity text NOT NULL CHECK (severity IN ('error', 'warning', 'critical', 'major', 'minor')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -85,8 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_version_validations_severity ON public.version_va
 CREATE TABLE IF NOT EXISTS public.version_status_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   version_id uuid NOT NULL REFERENCES public.model_versions(id) ON DELETE CASCADE,
-  old_status text CHECK (old_status IN ('draft', 'ready', 'locked')),
-  new_status text NOT NULL CHECK (new_status IN ('draft', 'ready', 'locked')),
+  old_status text CHECK (old_status IN ('Draft', 'Ready', 'Locked', 'Archived') OR old_status IS NULL),
+  new_status text NOT NULL CHECK (new_status IN ('Draft', 'Ready', 'Locked', 'Archived')),
   changed_by uuid, -- references auth.users(id)
   note text,
   changed_at timestamptz NOT NULL DEFAULT now()

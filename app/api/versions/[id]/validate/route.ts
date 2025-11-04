@@ -1,21 +1,22 @@
 // app/api/versions/[id]/validate/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getSettings } from "@/lib/getSettings";
 import { UuidSchema } from "@/lib/validateRequest";
 import { logger } from "@/lib/logger";
 import { withErrorHandler } from "@/lib/withErrorHandler";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
-);
+import { getServiceClient } from "@/lib/supabaseServer";
+import { verifyVersionOwnership, getCurrentUserId } from "@/lib/ownership";
+import type { TabType } from "@/lib/schemas/tabs";
 
 export const GET = withErrorHandler(async (
   _: Request,
-  ctx: { params: Promise<{ id: string }> }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
-  const { id } = await ctx.params;
+  if (!ctx?.params) {
+    return NextResponse.json({ error: 'Missing route parameters' }, { status: 400 });
+  }
+  const params = await ctx.params;
+  const { id } = params as { id: string };
   
   // Validate UUID
   const uuidValidation = UuidSchema.safeParse(id);
@@ -28,6 +29,15 @@ export const GET = withErrorHandler(async (
       { status: 400 }
     );
   }
+
+  // Verify ownership
+  const userId = await getCurrentUserId();
+  const ownershipCheck = await verifyVersionOwnership(id, userId);
+  if (!ownershipCheck.owned) {
+    return ownershipCheck.error || NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const supabase = getServiceClient();
 
   // Fetch settings
   const settings = await getSettings();
@@ -70,7 +80,7 @@ export const GET = withErrorHandler(async (
 
   // Validate each tab against its schema
   tabs?.forEach((tab) => {
-    const validation = validateTabData(tab.tab as any, tab.data);
+    const validation = validateTabData(tab.tab as TabType, tab.data);
     if (!validation.success && validation.error) {
       validation.error.issues.forEach((err) => {
         issues.push({

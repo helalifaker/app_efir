@@ -25,7 +25,7 @@ const SettingsSchema = z.object({
       theme: z.enum(['system', 'light', 'dark']),
     })
     .optional(),
-}).catchall(z.any()); // Allow unknown keys
+}).catchall(z.unknown()); // Allow unknown keys
 
 /**
  * GET /api/settings
@@ -51,9 +51,11 @@ export const GET = withErrorHandler(async () => {
 
   // Merge with fetched settings
   const settings = { ...defaults };
-  (data || []).forEach((item: any) => {
+  type SettingsKey = keyof typeof defaults;
+  (data || []).forEach((item: { key: string; value: unknown }) => {
     if (item.key in defaults) {
-      settings[item.key as keyof typeof defaults] = item.value as any;
+      const key = item.key as SettingsKey;
+      (settings as any)[key] = item.value;
     }
   });
 
@@ -89,7 +91,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       .upsert(
         {
           key,
-          value: value as any,
+          value: value as unknown, // JSONB accepts any JSON-serializable value
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'key' }

@@ -1,5 +1,6 @@
 // lib/getSettings.ts
 import { getServiceClient } from './supabaseServer';
+import { logger } from './logger';
 
 export type AppSettings = {
   vat: { rate: number };
@@ -8,7 +9,7 @@ export type AppSettings = {
   ui: { currency: string; theme: 'system' | 'light' | 'dark' };
 };
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   vat: { rate: 0.15 },
   numberFormat: { locale: 'en-US', decimals: 2, compact: false },
   validation: { requireTabs: ['overview', 'pnl', 'bs', 'cf'], bsTolerance: 0.01 },
@@ -27,21 +28,23 @@ export async function getSettings(): Promise<AppSettings> {
       .select('key, value');
 
     if (error) {
-      console.error('Settings query error:', error);
+      logger.error('Settings query error', error, { operation: 'fetch_settings' });
       return DEFAULT_SETTINGS;
     }
 
     // Merge settings with defaults
     const settings = { ...DEFAULT_SETTINGS };
-    (data || []).forEach((item: any) => {
+    type SettingsKey = keyof AppSettings;
+    (data || []).forEach((item: { key: string; value: unknown }) => {
       if (item.key in DEFAULT_SETTINGS) {
-        settings[item.key as keyof AppSettings] = item.value as any;
+        const key = item.key as SettingsKey;
+        (settings as any)[key] = item.value;
       }
     });
 
     return settings;
   } catch (e) {
-    console.error('Settings fetch error:', e);
+    logger.error('Settings fetch error', e instanceof Error ? e : new Error(String(e)), { operation: 'fetch_settings' });
     return DEFAULT_SETTINGS;
   }
 }

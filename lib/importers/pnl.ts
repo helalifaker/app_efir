@@ -1,7 +1,6 @@
 // lib/importers/pnl.ts
 // CSV column mapping for P&L data
 
-import { z } from 'zod';
 import { PnlTab } from '../schemas/tabs';
 
 export type ColumnMapping = {
@@ -83,7 +82,7 @@ export function parsePnlCsv(csvText: string): {
     if (value && value !== '') {
       const num = parseFloat(value);
       if (!isNaN(num)) {
-        (data as any)[key] = num;
+        (data as Record<string, unknown>)[key] = num;
       } else {
         errors.push(`Invalid number for ${key}: ${value}`);
       }

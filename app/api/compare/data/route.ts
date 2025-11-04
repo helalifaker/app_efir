@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getCompareData } from '@/lib/getCompareData';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const idsParam = searchParams.get('ids');
-    const baselineParam = searchParams.get('baseline');
+  const { searchParams } = new URL(request.url);
+  const idsParam = searchParams.get('ids');
+  const baselineParam = searchParams.get('baseline');
 
+  try {
     if (!idsParam || !baselineParam) {
       return NextResponse.json(
         { error: 'Missing ids or baseline parameter' },
@@ -33,10 +34,11 @@ export async function GET(request: Request) {
     const compareData = await getCompareData(ids, baselineParam);
     
     return NextResponse.json(compareData);
-  } catch (e: any) {
-    console.error('Compare data route error:', e);
+  } catch (e: unknown) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    logger.error('Compare data route error', error, { idsParam, baselineParam });
     return NextResponse.json(
-      { error: e?.message ?? 'Internal server error' },
+      { error: error.message ?? 'Internal server error' },
       { status: 500 }
     );
   }

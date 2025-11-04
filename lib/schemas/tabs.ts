@@ -120,9 +120,9 @@ export const capexSchema = z.object({
 export type CapexTab = z.infer<typeof capexSchema>;
 
 // ============================================================================
-// CONTROLS TAB
+// VALIDATION TAB
 // ============================================================================
-export const controlsSchema = z.object({
+export const validationSchema = z.object({
   status: z.string().optional(),
   last_check: z.string().optional(),
   checks: z.array(z.object({
@@ -133,26 +133,43 @@ export const controlsSchema = z.object({
   notes: z.string().optional(),
 }).passthrough();
 
-export type ControlsTab = z.infer<typeof controlsSchema>;
+export type ValidationTab = z.infer<typeof validationSchema>;
 
 // ============================================================================
 // UNION TYPE FOR ALL TABS
 // ============================================================================
-export type TabData = OverviewTab | PnlTab | BsTab | CfTab | CapexTab | ControlsTab;
+export type TabData = AssumptionsTab | OverviewTab | PnlTab | BsTab | CfTab | CapexTab | ValidationTab;
 
-export type TabType = 'overview' | 'pnl' | 'bs' | 'cf' | 'capex' | 'controls';
+export type TabType = 'assumptions' | 'overview' | 'pnl' | 'bs' | 'cf' | 'capex' | 'validation';
 
 // ============================================================================
 // SCHEMA MAPPER
 // ============================================================================
-export const tabSchemas: Record<TabType, z.ZodSchema<any>> = {
+// Assumptions schema (similar to overview, allows flexible data)
+export const assumptionsSchema = z.object({
+  assumptions: z.array(z.object({
+    name: z.string(),
+    value: z.union([z.string(), z.number()]),
+    description: z.string().optional(),
+  })).optional(),
+  notes: z.string().optional(),
+  key_assumptions: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+}).passthrough();
+
+export type AssumptionsTab = z.infer<typeof assumptionsSchema>;
+
+export const tabSchemas: Record<TabType, z.ZodSchema<unknown>> = {
+  assumptions: assumptionsSchema,
   overview: overviewSchema,
   pnl: pnlSchema,
   bs: bsSchema,
   cf: cfSchema,
   capex: capexSchema,
-  controls: controlsSchema,
+  validation: validationSchema,
 };
+
+// Tab order constant for navigation
+export const TAB_ORDER: TabType[] = ['overview', 'assumptions', 'pnl', 'bs', 'cf', 'capex', 'validation'];
 
 /**
  * Validate tab data against its schema

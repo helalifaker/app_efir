@@ -1,38 +1,51 @@
 import { NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabaseServer';
+import { logger } from '@/lib/logger';
+import { withErrorHandler } from '@/lib/withErrorHandler';
 
-export async function GET() {
-  try {
-    const supabase = getServiceClient();
+type VersionRow = {
+  id: string;
+  name: string;
+  status: string;
+  model_id: string;
+  models: { name: string }[] | null;
+};
 
-    const { data: versions, error } = await supabase
-      .from('model_versions')
-      .select('id, name, status, model_id, models(name)')
-      .order('created_at', { ascending: false });
+type FormattedVersion = {
+  id: string;
+  name: string;
+  status: string;
+  model_name: string;
+  model_id: string;
+};
 
-    if (error) {
-      console.error('All versions query error:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
+export const GET = withErrorHandler(async () => {
+  const supabase = getServiceClient();
 
-    const formattedVersions = (versions || []).map((v: any) => ({
-      id: v.id,
-      name: v.name,
-      status: v.status,
-      model_name: v.models?.name || 'Unknown Model',
-      model_id: v.model_id,
-    }));
+  const { data: versions, error } = await supabase
+    .from('model_versions')
+    .select('id, name, status, model_id, models(name)')
+    .order('created_at', { ascending: false });
 
-    return NextResponse.json({ versions: formattedVersions });
-  } catch (e: any) {
-    console.error('Versions route error:', e);
+  if (error) {
+    logger.error('Failed to fetch versions for compare', error);
     return NextResponse.json(
-      { error: e?.message ?? 'Internal server error' },
+      { error: error.message },
       { status: 500 }
     );
   }
-}
+
+  const formattedVersions: FormattedVersion[] = (versions || []).map((v) => {
+    const row = v as unknown as VersionRow;
+    return {
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      model_name: row.models?.[0]?.name || 'Unknown Model',
+      model_id: row.model_id,
+    };
+  });
+
+  return NextResponse.json({ versions: formattedVersions });
+});
 
