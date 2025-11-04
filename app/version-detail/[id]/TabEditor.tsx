@@ -57,8 +57,8 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
     formState: { errors, isDirty },
     watch,
     reset,
-  } = useForm({
-    resolver: zodResolver(schema as any),
+  } = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
     defaultValues: initialData,
     mode: 'onChange',
   });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getServiceClient } from '@/lib/supabaseServer';
 import { logger } from '@/lib/logger';
 import { withErrorHandler, createErrorResponse } from '@/lib/withErrorHandler';
+import { DEFAULT_SETTINGS, mergeSettings } from '@/lib/getSettings';
 
 const SettingsSchema = z.object({
   vat: z.object({ rate: z.number().min(0).max(1) }).optional(),
@@ -41,23 +42,8 @@ export const GET = withErrorHandler(async () => {
     return createErrorResponse('Failed to fetch settings', 500);
   }
 
-  // Start with defaults
-  const defaults = {
-    vat: { rate: 0.15 },
-    numberFormat: { locale: 'en-US' as const, decimals: 2 as const, compact: false },
-    validation: { requireTabs: ['overview', 'pnl', 'bs', 'cf'], bsTolerance: 0.01 },
-    ui: { currency: 'SAR', theme: 'system' as const },
-  };
-
-  // Merge with fetched settings
-  const settings = { ...defaults };
-  type SettingsKey = keyof typeof defaults;
-  (data || []).forEach((item: { key: string; value: unknown }) => {
-    if (item.key in defaults) {
-      const key = item.key as SettingsKey;
-      (settings as any)[key] = item.value;
-    }
-  });
+  // Use the shared merge function for type-safe merging
+  const settings = mergeSettings(DEFAULT_SETTINGS, data || []);
 
   logger.info('Settings fetched successfully', { keys: Object.keys(settings) });
   return NextResponse.json(settings);

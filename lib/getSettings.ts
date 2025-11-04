@@ -17,6 +17,70 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 /**
+ * Type-safe merge of settings with defaults
+ */
+export function mergeSettings(defaults: AppSettings, fetched: Array<{ key: string; value: unknown }>): AppSettings {
+  const settings: AppSettings = { ...defaults };
+
+  fetched.forEach((item) => {
+    const key = item.key as keyof AppSettings;
+    if (!(key in defaults)) {
+      return;
+    }
+    
+    const defaultValue = defaults[key];
+    const fetchedValue = item.value;
+
+    // Use type-specific handling to satisfy TypeScript
+    switch (key) {
+      case 'vat':
+        if (
+          typeof fetchedValue === 'object' &&
+          fetchedValue !== null &&
+          'rate' in fetchedValue &&
+          typeof (fetchedValue as { rate: unknown }).rate === 'number'
+        ) {
+          settings.vat = { ...defaultValue, ...(fetchedValue as AppSettings['vat']) };
+        }
+        break;
+      case 'numberFormat':
+        if (
+          typeof fetchedValue === 'object' &&
+          fetchedValue !== null &&
+          'locale' in fetchedValue &&
+          'decimals' in fetchedValue &&
+          'compact' in fetchedValue
+        ) {
+          settings.numberFormat = { ...defaultValue, ...(fetchedValue as AppSettings['numberFormat']) };
+        }
+        break;
+      case 'validation':
+        if (
+          typeof fetchedValue === 'object' &&
+          fetchedValue !== null &&
+          'requireTabs' in fetchedValue &&
+          'bsTolerance' in fetchedValue
+        ) {
+          settings.validation = { ...defaultValue, ...(fetchedValue as AppSettings['validation']) };
+        }
+        break;
+      case 'ui':
+        if (
+          typeof fetchedValue === 'object' &&
+          fetchedValue !== null &&
+          'currency' in fetchedValue &&
+          'theme' in fetchedValue
+        ) {
+          settings.ui = { ...defaultValue, ...(fetchedValue as AppSettings['ui']) };
+        }
+        break;
+    }
+  });
+
+  return settings;
+}
+
+/**
  * Fetch app settings with defaults applied
  */
 export async function getSettings(): Promise<AppSettings> {
@@ -32,17 +96,7 @@ export async function getSettings(): Promise<AppSettings> {
       return DEFAULT_SETTINGS;
     }
 
-    // Merge settings with defaults
-    const settings = { ...DEFAULT_SETTINGS };
-    type SettingsKey = keyof AppSettings;
-    (data || []).forEach((item: { key: string; value: unknown }) => {
-      if (item.key in DEFAULT_SETTINGS) {
-        const key = item.key as SettingsKey;
-        (settings as any)[key] = item.value;
-      }
-    });
-
-    return settings;
+    return mergeSettings(DEFAULT_SETTINGS, data || []);
   } catch (e) {
     logger.error('Settings fetch error', e instanceof Error ? e : new Error(String(e)), { operation: 'fetch_settings' });
     return DEFAULT_SETTINGS;

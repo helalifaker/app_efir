@@ -53,6 +53,7 @@ export async function middleware(request: NextRequest) {
         },
         set(name: string, value: string, options?: any) {
           // Set cookie on response
+          // Note: Using 'any' for options due to edge runtime compatibility and Next.js cookie API variations
           const cookieOptions: any = { name, value };
           if (options) {
             if (options.path !== undefined) cookieOptions.path = options.path;
@@ -69,6 +70,7 @@ export async function middleware(request: NextRequest) {
         },
         remove(name: string, options?: any) {
           // Remove cookie on response by setting maxAge to 0
+          // Note: Using 'any' for options due to edge runtime compatibility
           response.cookies.set({ name, value: '', maxAge: 0, ...(options || {}) });
         },
       } as any,
