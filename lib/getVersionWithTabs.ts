@@ -28,61 +28,64 @@ async function _getVersionWithTabs(versionId: string) {
   }
 
   //
-  // 2) get the parent model (using version.model_id)
+  // 2-5) Run all independent queries in parallel for better performance
   //
-  const { data: model, error: mErr } = await supabase
-    .from('models')
-    .select('id, name, description')
-    .eq('id', version.model_id)
-    .maybeSingle();
+  const [modelResult, tabsResult, validationsResult, historyResult] = await Promise.all([
+    // 2) get the parent model
+    supabase
+      .from('models')
+      .select('id, name, description')
+      .eq('id', version.model_id)
+      .maybeSingle(),
+    
+    // 3) get the tabs
+    supabase
+      .from('version_tabs')
+      .select('id, version_id, tab, data, updated_at')
+      .eq('version_id', versionId)
+      .order('tab'),
+    
+    // 4) get the validations
+    supabase
+      .from('version_validations')
+      .select('id, code, message, severity, created_at')
+      .eq('version_id', versionId)
+      .order('created_at', { ascending: false }),
+    
+    // 5) get the status history (first 50 only for performance)
+    supabase
+      .from('version_status_history')
+      .select('id, old_status, new_status, changed_by, note, changed_at')
+      .eq('version_id', versionId)
+      .order('changed_at', { ascending: false })
+      .limit(50),
+  ]);
 
-  if (mErr) {
-    logger.error('Model query error', mErr, { modelId: version.model_id, versionId, operation: 'get_version_with_tabs' });
-    throw mErr;
+  // Check for errors
+  if (modelResult.error) {
+    logger.error('Model query error', modelResult.error, { modelId: version.model_id, versionId, operation: 'get_version_with_tabs' });
+    throw modelResult.error;
   }
 
-  //
-  // 3) get the tabs
-  //
-  const { data: tabs, error: tErr } = await supabase
-    .from('version_tabs')
-    .select('id, version_id, tab, data, updated_at')
-    .eq('version_id', versionId)
-    .order('tab');
-
-  if (tErr) {
-    logger.error('Tabs query error', tErr, { versionId, operation: 'get_version_with_tabs' });
-    throw tErr;
+  if (tabsResult.error) {
+    logger.error('Tabs query error', tabsResult.error, { versionId, operation: 'get_version_with_tabs' });
+    throw tabsResult.error;
   }
 
-  //
-  // 4) get the validations
-  //
-  const { data: validations, error: valErr } = await supabase
-    .from('version_validations')
-    .select('id, code, message, severity, created_at')
-    .eq('version_id', versionId)
-    .order('created_at', { ascending: false });
-
-  if (valErr) {
-    logger.error('Validations query error', valErr, { versionId, operation: 'get_version_with_tabs' });
-    throw valErr;
+  if (validationsResult.error) {
+    logger.error('Validations query error', validationsResult.error, { versionId, operation: 'get_version_with_tabs' });
+    throw validationsResult.error;
   }
 
-  //
-  // 5) get the status history (first 50 only for performance)
-  //
-  const { data: history, error: histErr } = await supabase
-    .from('version_status_history')
-    .select('id, old_status, new_status, changed_by, note, changed_at')
-    .eq('version_id', versionId)
-    .order('changed_at', { ascending: false })
-    .limit(50);
-
-  if (histErr) {
-    logger.error('History query error', histErr, { versionId, operation: 'get_version_with_tabs' });
-    throw histErr;
+  if (historyResult.error) {
+    logger.error('History query error', historyResult.error, { versionId, operation: 'get_version_with_tabs' });
+    throw historyResult.error;
   }
+
+  const model = modelResult.data;
+  const tabs = tabsResult.data || [];
+  const validations = validationsResult.data || [];
+  const history = historyResult.data || [];
 
   // Resolve user IDs to emails/names
   type HistoryItem = {
@@ -94,11 +97,11 @@ async function _getVersionWithTabs(versionId: string) {
     changed_at: string;
   };
   
-  const userIds = (history || []).map((h: HistoryItem) => h.changed_by).filter(Boolean) as string[];
+  const userIds = history.map((h: HistoryItem) => h.changed_by).filter(Boolean) as string[];
   const userMap = await resolveUsers(userIds);
   
   // Add resolved names to history items
-  const enrichedHistory = (history || []).map((h: HistoryItem) => ({
+  const enrichedHistory = history.map((h: HistoryItem) => ({
     ...h,
     changed_by_name: h.changed_by ? (userMap[h.changed_by] || 'System') : 'System',
   }));
@@ -113,7 +116,7 @@ async function _getVersionWithTabs(versionId: string) {
   };
   
   const tabByKey: Record<string, TabItem> = {};
-  (tabs || []).forEach((t: TabItem) => {
+  tabs.forEach((t: TabItem) => {
     tabByKey[t.tab] = t;
   });
 
@@ -123,8 +126,8 @@ async function _getVersionWithTabs(versionId: string) {
       model, // so the page can do version.model?.name
     },
     tabs: tabByKey,
-    validations: validations || [],
-    history: enrichedHistory || [],
+    validations,
+    history: enrichedHistory,
   };
 }
 

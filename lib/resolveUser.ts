@@ -38,20 +38,74 @@ export async function resolveUser(userId: string | null): Promise<string> {
 }
 
 /**
- * Resolve multiple user IDs to emails/names
+ * Resolve multiple user IDs to emails/names (OPTIMIZED - batches queries)
+ * This eliminates N+1 query problem by fetching all users in parallel batches
  */
 export async function resolveUsers(userIds: (string | null)[]): Promise<Record<string, string>> {
-  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  const uniqueIds = [...new Set(userIds.filter(Boolean))] as string[];
+  
+  if (uniqueIds.length === 0) {
+    return {};
+  }
+
   const resolved: Record<string, string> = {};
+  const supabase = getServiceClient();
 
-  await Promise.all(
-    uniqueIds.map(async (id) => {
-      if (id) {
-        resolved[id] = await resolveUser(id);
+  try {
+    // Batch fetch from profiles table first (faster, single query)
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', uniqueIds);
+
+    if (!profilesError && profiles) {
+      profiles.forEach((profile) => {
+        resolved[profile.id] = profile.full_name || profile.email || 'System';
+      });
+    }
+
+    // For any IDs not found in profiles, try auth.admin API in parallel
+    const missingIds = uniqueIds.filter((id) => !resolved[id]);
+    
+    if (missingIds.length > 0) {
+      // Fetch remaining users via admin API in parallel (batched)
+      await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const { data: userData, error: userError } = await supabase.auth.admin.getUserById(id);
+            if (!userError && userData?.user?.email) {
+              resolved[id] = userData.user.email;
+            } else {
+              resolved[id] = 'System';
+            }
+          } catch (e) {
+            logger.debug('Error fetching user via admin API', { userId: id, error: e });
+            resolved[id] = 'System';
+          }
+        })
+      );
+    }
+
+    // Ensure all IDs have a value (fallback to 'System')
+    uniqueIds.forEach((id) => {
+      if (!resolved[id]) {
+        resolved[id] = 'System';
       }
-    })
-  );
+    });
 
-  return resolved;
+    return resolved;
+  } catch (e) {
+    logger.error('Error resolving users', e instanceof Error ? e : new Error(String(e)), { 
+      userIds: uniqueIds, 
+      operation: 'resolve_users' 
+    });
+    
+    // Fallback: return System for all
+    uniqueIds.forEach((id) => {
+      resolved[id] = 'System';
+    });
+    
+    return resolved;
+  }
 }
 

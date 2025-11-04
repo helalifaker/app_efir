@@ -82,7 +82,7 @@ function CompareContent() {
     }
   }, [searchParams]);
 
-  // Load compare data when selections change
+  // Load compare data when selections change (with debouncing to prevent excessive API calls)
   useEffect(() => {
     if (selectedIds.length === 0 || !baselineId) {
       setCompareData({});
@@ -96,21 +96,37 @@ function CompareContent() {
     params.set('baseline', baselineId);
     router.replace(`/compare?${params.toString()}`, { scroll: false });
 
-    async function loadCompareData() {
-      try {
-        const res = await fetch(`/api/compare/data?ids=${selectedIds.join(',')}&baseline=${baselineId}`);
-        const data = await res.json();
-        
-        if (data.tabsByVersion && data.allKeys) {
-          setCompareData(data.tabsByVersion);
-          setAllKeys(data.allKeys);
+    // Debounce compare data loading to prevent excessive API calls
+    const timeoutId = setTimeout(() => {
+      async function loadCompareData() {
+        try {
+          const res = await fetch(`/api/compare/data?ids=${selectedIds.join(',')}&baseline=${baselineId}`);
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: 'Failed to load compare data' }));
+            logger.error('Failed to load compare data', undefined, {
+              status: res.status,
+              statusText: res.statusText,
+              error: errorData.error,
+              selectedIds,
+              baselineId,
+            });
+            return;
+          }
+          const data = await res.json();
+          
+          if (data.tabsByVersion && data.allKeys) {
+            setCompareData(data.tabsByVersion);
+            setAllKeys(data.allKeys);
+          }
+        } catch (e) {
+          logger.error('Failed to load compare data', e, { selectedIds, baselineId });
         }
-      } catch (e) {
-        logger.error('Failed to load compare data', e, { selectedIds, baselineId });
       }
-    }
 
-    loadCompareData();
+      loadCompareData();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
   }, [selectedIds, baselineId, router]);
 
   const addVersion = (id: string) => {
