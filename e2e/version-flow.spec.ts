@@ -132,8 +132,8 @@ test.describe('Version Detail Flow', () => {
   });
 
   test('should lock version and update history', async ({ page }) => {
-    // Ensure version is in "ready" state first
-    await setVersionStatus(TEST_VERSION_ID, 'ready');
+    // Ensure version is in "Ready" state first
+    await setVersionStatus(TEST_VERSION_ID, 'Ready');
     
     // Remove any blocking validations
     await removeValidations(TEST_VERSION_ID);
