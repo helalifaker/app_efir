@@ -49,7 +49,7 @@ function jsonToRows(data: Record<string, unknown>, prefix = ''): Array<{ key: st
       rows.push({ key: fullKey, value: '' });
     } else if (typeof value === 'object' && !Array.isArray(value) && value !== null) {
       // Recursively process nested objects
-      rows.push(...jsonToRows(value, fullKey));
+      rows.push(...jsonToRows(value as Record<string, unknown>, fullKey));
     } else if (Array.isArray(value)) {
       // Handle arrays
       if (value.length === 0) {
@@ -57,13 +57,13 @@ function jsonToRows(data: Record<string, unknown>, prefix = ''): Array<{ key: st
       } else if (value.every(item => typeof item === 'object' && item !== null)) {
         // Array of objects - flatten each item
         value.forEach((item, index) => {
-          rows.push(...jsonToRows(item, `${fullKey}[${index}]`));
+          rows.push(...jsonToRows(item as Record<string, unknown>, `${fullKey}[${index}]`));
         });
       } else {
-        rows.push({ key: fullKey, value: value.join(', ') });
+        rows.push({ key: fullKey, value: String(value) });
       }
     } else {
-      rows.push({ key: fullKey, value });
+      rows.push({ key: fullKey, value: typeof value === 'string' || typeof value === 'number' ? value : String(value) });
     }
   }
   
