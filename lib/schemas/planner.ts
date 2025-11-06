@@ -53,36 +53,60 @@ export const ScenarioResponseSchema = z.object({
 // ============================================================================
 
 export const DriverCategorySchema = z.enum(['revenue', 'cost', 'growth', 'operational', 'financial', 'custom']);
+export const DriverDataTypeSchema = z.enum(['number', 'percentage', 'currency', 'boolean']);
 
 export const CreateDriverSchema = z.object({
-  model_id: z.string().uuid(),
+  scenario_id: z.string().uuid(),
   name: z.string().min(1).max(100),
-  display_name: z.string().min(1).max(255),
+  description: z.string().max(1000).optional(),
   category: DriverCategorySchema,
+  data_type: DriverDataTypeSchema,
   unit: z.string().max(50).optional(),
   formula: z.string().max(500).optional(),
-  description: z.string().max(1000).optional(),
+  dependencies: z.array(z.string().uuid()).optional(),
   is_global: z.boolean().optional(),
-  default_value: z.number().optional(),
-  min_value: z.number().optional(),
-  max_value: z.number().optional(),
-}).transform((data) => ({ ...data, is_global: data.is_global ?? false }));
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}).transform((data) => ({
+  ...data,
+  is_global: data.is_global ?? false,
+  dependencies: data.dependencies ?? [],
+  metadata: data.metadata ?? {}
+}));
 
 export const UpdateDriverSchema = z.object({
-  display_name: z.string().min(1).max(255).optional(),
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(1000).optional(),
+  category: DriverCategorySchema.optional(),
+  data_type: DriverDataTypeSchema.optional(),
   unit: z.string().max(50).optional(),
   formula: z.string().max(500).optional(),
-  description: z.string().max(1000).optional(),
-  default_value: z.number().optional(),
-  min_value: z.number().optional(),
-  max_value: z.number().optional(),
+  dependencies: z.array(z.string().uuid()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const DriverValueSchema = z.object({
   year: z.number().int().min(2023).max(2052),
   value: z.number(),
-  source: z.enum(['manual', 'calculated', 'imported', 'forecasted']).optional(),
+  source: z.string().optional(),
   notes: z.string().max(500).optional(),
+});
+
+export const CreateDriverValueSchema = z.object({
+  scenario_id: z.string().uuid(),
+  year: z.number().int().min(2023).max(2052),
+  value: z.number(),
+  source: z.string().optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export const BulkDriverValuesSchema = z.object({
+  scenario_id: z.string().uuid(),
+  values: z.array(z.object({
+    year: z.number().int().min(2023).max(2052),
+    value: z.number(),
+    source: z.string().optional(),
+    notes: z.string().max(500).optional(),
+  })).min(1),
 });
 
 export const SetDriverValuesSchema = z.object({
@@ -281,24 +305,35 @@ export const UpdateTemplateSchema = z.object({
 // ============================================================================
 
 export const TrendAnalysisRequestSchema = z.object({
-  version_id: z.string().uuid(),
-  scenario_id: z.string().uuid().optional(),
-  metric_key: z.string(),
-  historical_years: z.array(z.number().int()).min(2),
-  forecast_years: z.array(z.number().int()).min(1),
-  trend_type: z.enum(['linear', 'exponential', 'polynomial']).optional(),
-}).transform((data) => ({ ...data, trend_type: data.trend_type ?? 'linear' }));
+  driver_id: z.string().uuid(),
+  scenario_id: z.string().uuid(),
+  historical_years: z.object({
+    start: z.number().int().min(2023),
+    end: z.number().int().max(2052),
+  }),
+  forecast_years: z.object({
+    start: z.number().int().min(2023),
+    end: z.number().int().max(2052),
+  }),
+  method: z.enum(['linear', 'exponential', 'polynomial', 'moving_average']).optional(),
+}).transform((data) => ({ ...data, method: data.method ?? 'linear' }));
 
 export const GrowthExtrapolationSchema = z.object({
-  version_id: z.string().uuid(),
-  scenario_id: z.string().uuid().optional(),
-  metric_key: z.string(),
-  base_year: z.number().int(),
-  base_value: z.number(),
-  growth_rate: z.number(), // As decimal (e.g., 0.15 for 15%)
-  forecast_years: z.array(z.number().int()).min(1),
-  compounding: z.boolean().optional(),
-}).transform((data) => ({ ...data, compounding: data.compounding ?? true }));
+  driver_id: z.string().uuid(),
+  scenario_id: z.string().uuid(),
+  base_year: z.number().int().min(2023).max(2052),
+  forecast_years: z.object({
+    start: z.number().int().min(2023),
+    end: z.number().int().max(2052),
+  }),
+  growth_rate: z.number(), // As percentage (e.g., 15 for 15%)
+  growth_rate_decline: z.object({
+    annual_decline: z.number(),
+    terminal_rate: z.number(),
+  }).optional(),
+  floor_value: z.number().optional(),
+  ceiling_value: z.number().optional(),
+});
 
 export const SeasonalAdjustmentSchema = z.object({
   version_id: z.string().uuid(),
