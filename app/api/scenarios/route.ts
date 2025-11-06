@@ -2,7 +2,7 @@
 // API routes for scenario management
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceClient } from '@/lib/supabase/server';
+import { getServiceClient } from '@/lib/supabaseServer';
 import { withErrorHandler, createErrorResponse } from '@/lib/withErrorHandler';
 import { CreateScenarioSchema } from '@/lib/schemas/planner';
 import { logger } from '@/lib/logger';
@@ -118,7 +118,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       if (fetchError) throw fetchError;
 
       if (tabsToCopy && tabsToCopy.length > 0) {
-        const newTabs = tabsToCopy.map((tab) => ({
+        const newTabs = tabsToCopy.map((tab: { tab: string; data: unknown }) => ({
           version_id,
           scenario_id: scenario.id,
           tab: tab.tab,

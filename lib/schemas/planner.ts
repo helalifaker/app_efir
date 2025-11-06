@@ -16,13 +16,24 @@ export const CreateScenarioSchema = z.object({
   description: z.string().max(1000).optional(),
   parent_scenario_id: z.string().uuid().optional(),
   copy_data_from: z.string().uuid().optional(),
-});
+}) as z.ZodType<{
+  version_id: string;
+  name: string;
+  type: 'base' | 'optimistic' | 'pessimistic' | 'custom';
+  description?: string;
+  parent_scenario_id?: string;
+  copy_data_from?: string;
+}>;
 
 export const UpdateScenarioSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().max(1000).optional(),
-  assumptions: z.record(z.unknown()).optional(),
-});
+  assumptions: z.record(z.string(), z.unknown()).optional(),
+}) as z.ZodType<{
+  name?: string;
+  description?: string;
+  assumptions?: Record<string, unknown>;
+}>;
 
 export const ScenarioResponseSchema = z.object({
   id: z.string().uuid(),
@@ -31,7 +42,7 @@ export const ScenarioResponseSchema = z.object({
   type: ScenarioTypeSchema,
   description: z.string().optional(),
   parent_scenario_id: z.string().uuid().optional(),
-  assumptions: z.record(z.unknown()),
+  assumptions: z.record(z.string(), z.unknown()),
   created_by: z.string().uuid().optional(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -51,11 +62,11 @@ export const CreateDriverSchema = z.object({
   unit: z.string().max(50).optional(),
   formula: z.string().max(500).optional(),
   description: z.string().max(1000).optional(),
-  is_global: z.boolean().default(false),
+  is_global: z.boolean().optional(),
   default_value: z.number().optional(),
   min_value: z.number().optional(),
   max_value: z.number().optional(),
-});
+}).transform((data) => ({ ...data, is_global: data.is_global ?? false }));
 
 export const UpdateDriverSchema = z.object({
   display_name: z.string().min(1).max(255).optional(),
@@ -134,8 +145,8 @@ export const CreateCommentSchema = z.object({
   entity_id: z.string().uuid(),
   parent_comment_id: z.string().uuid().optional(),
   content: z.string().min(1).max(5000),
-  mentions: z.array(z.string().uuid()).default([]),
-});
+  mentions: z.array(z.string().uuid()).optional(),
+}).transform((data) => ({ ...data, mentions: data.mentions ?? [] }));
 
 export const UpdateCommentSchema = z.object({
   content: z.string().min(1).max(5000).optional(),
@@ -187,9 +198,13 @@ export const GoalSeekConfigSchema = z.object({
   variable_driver_id: z.string().uuid(),
   variable_name: z.string(),
   initial_guess: z.number().optional(),
-  max_iterations: z.number().int().min(10).max(1000).default(100),
-  tolerance: z.number().positive().default(0.01),
-});
+  max_iterations: z.number().int().min(10).max(1000).optional(),
+  tolerance: z.number().positive().optional(),
+}).transform((data) => ({
+  ...data,
+  max_iterations: data.max_iterations ?? 100,
+  tolerance: data.tolerance ?? 0.01,
+}));
 
 export const MonteCarloVariableSchema = z.object({
   driver_id: z.string().uuid(),
@@ -205,10 +220,10 @@ export const MonteCarloVariableSchema = z.object({
 });
 
 export const MonteCarloConfigSchema = z.object({
-  iterations: z.number().int().min(100).max(10000).default(1000),
+  iterations: z.number().int().min(100).max(10000).optional(),
   variables: z.array(MonteCarloVariableSchema).min(1),
   output_metrics: z.array(z.string()).min(1),
-});
+}).transform((data) => ({ ...data, iterations: data.iterations ?? 1000 }));
 
 export const RunSensitivitySchema = z.object({
   version_id: z.string().uuid(),
@@ -236,18 +251,22 @@ export const TemplateDriverSchema = z.object({
 
 export const TemplateConfigSchema = z.object({
   drivers: z.array(TemplateDriverSchema),
-  assumptions: z.record(z.unknown()).default({}),
-  formulas: z.record(z.string()).default({}),
-});
+  assumptions: z.record(z.string(), z.unknown()).optional(),
+  formulas: z.record(z.string(), z.string()).optional(),
+}).transform((data) => ({
+  ...data,
+  assumptions: data.assumptions ?? {},
+  formulas: data.formulas ?? {},
+}));
 
 export const CreateTemplateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
   category: z.string().max(100).optional(),
   config: TemplateConfigSchema,
-  preview_data: z.record(z.unknown()).optional(),
-  is_public: z.boolean().default(false),
-});
+  preview_data: z.record(z.string(), z.unknown()).optional(),
+  is_public: z.boolean().optional(),
+}).transform((data) => ({ ...data, is_public: data.is_public ?? false }));
 
 export const UpdateTemplateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -267,8 +286,8 @@ export const TrendAnalysisRequestSchema = z.object({
   metric_key: z.string(),
   historical_years: z.array(z.number().int()).min(2),
   forecast_years: z.array(z.number().int()).min(1),
-  trend_type: z.enum(['linear', 'exponential', 'polynomial']).default('linear'),
-});
+  trend_type: z.enum(['linear', 'exponential', 'polynomial']).optional(),
+}).transform((data) => ({ ...data, trend_type: data.trend_type ?? 'linear' }));
 
 export const GrowthExtrapolationSchema = z.object({
   version_id: z.string().uuid(),
@@ -278,8 +297,8 @@ export const GrowthExtrapolationSchema = z.object({
   base_value: z.number(),
   growth_rate: z.number(), // As decimal (e.g., 0.15 for 15%)
   forecast_years: z.array(z.number().int()).min(1),
-  compounding: z.boolean().default(true),
-});
+  compounding: z.boolean().optional(),
+}).transform((data) => ({ ...data, compounding: data.compounding ?? true }));
 
 export const SeasonalAdjustmentSchema = z.object({
   version_id: z.string().uuid(),
@@ -296,7 +315,7 @@ export const SeasonalAdjustmentSchema = z.object({
 
 export const WizardStepSchema = z.object({
   step: z.number().int().min(1).max(10),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
 });
 
 export const WizardCompleteSchema = z.object({
@@ -308,7 +327,7 @@ export const WizardCompleteSchema = z.object({
     end_year: z.number().int().max(2052),
   }),
   drivers: z.array(CreateDriverSchema).optional(),
-  assumptions: z.record(z.unknown()).optional(),
+  assumptions: z.record(z.string(), z.unknown()).optional(),
 });
 
 // ============================================================================

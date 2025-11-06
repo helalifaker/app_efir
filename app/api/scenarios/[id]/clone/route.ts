@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getServiceClient } from '@/lib/supabase/server';
+import { getServiceClient } from '@/lib/supabaseServer';
 import { withErrorHandler, createErrorResponse } from '@/lib/withErrorHandler';
 import { logger } from '@/lib/logger';
 
@@ -19,8 +19,12 @@ const CloneScenarioSchema = z.object({
  */
 export const POST = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
+  if (!ctx?.params) {
+    return createErrorResponse('Missing route parameters', 400);
+  }
+  const params = await ctx.params;
   const sourceScenarioId = params.id;
   const body = await request.json();
 
@@ -71,7 +75,7 @@ export const POST = withErrorHandler(async (
     .eq('scenario_id', sourceScenarioId);
 
   if (!tabsError && tabs && tabs.length > 0) {
-    const newTabs = tabs.map((tab) => ({
+    const newTabs = tabs.map((tab: { tab: string; data: unknown }) => ({
       version_id: sourceScenario.version_id,
       scenario_id: newScenario.id,
       tab: tab.tab,
@@ -88,7 +92,13 @@ export const POST = withErrorHandler(async (
     .eq('scenario_id', sourceScenarioId);
 
   if (!driverError && driverValues && driverValues.length > 0) {
-    const newDriverValues = driverValues.map((dv) => ({
+    const newDriverValues = driverValues.map((dv: {
+      driver_id: string;
+      year: number;
+      value: number;
+      source?: string;
+      notes?: string;
+    }) => ({
       driver_id: dv.driver_id,
       scenario_id: newScenario.id,
       year: dv.year,

@@ -2,7 +2,7 @@
 // API routes for individual scenario operations
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceClient } from '@/lib/supabase/server';
+import { getServiceClient } from '@/lib/supabaseServer';
 import { withErrorHandler, createErrorResponse } from '@/lib/withErrorHandler';
 import { UpdateScenarioSchema } from '@/lib/schemas/planner';
 import { logger } from '@/lib/logger';
@@ -13,8 +13,12 @@ import { logger } from '@/lib/logger';
  */
 export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
+  if (!ctx?.params) {
+    return createErrorResponse('Missing route parameters', 400);
+  }
+  const params = await ctx.params;
   const scenarioId = params.id;
   const supabase = getServiceClient();
 
@@ -65,8 +69,12 @@ export const GET = withErrorHandler(async (
  */
 export const PATCH = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
+  if (!ctx?.params) {
+    return createErrorResponse('Missing route parameters', 400);
+  }
+  const params = await ctx.params;
   const scenarioId = params.id;
   const body = await request.json();
 
@@ -119,8 +127,12 @@ export const PATCH = withErrorHandler(async (
  */
 export const DELETE = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  ctx?: { params?: Promise<Record<string, string>> }
 ) => {
+  if (!ctx?.params) {
+    return createErrorResponse('Missing route parameters', 400);
+  }
+  const params = await ctx.params;
   const scenarioId = params.id;
   const supabase = getServiceClient();
 

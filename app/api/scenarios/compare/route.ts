@@ -2,7 +2,7 @@
 // Compare multiple scenarios side-by-side
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceClient } from '@/lib/supabase/server';
+import { getServiceClient } from '@/lib/supabaseServer';
 import { withErrorHandler, createErrorResponse } from '@/lib/withErrorHandler';
 import { CompareScenariosSchema } from '@/lib/schemas/planner';
 import { logger } from '@/lib/logger';
@@ -61,18 +61,19 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
 
   // Organize data by scenario
   const comparisonData = scenario_ids.map((scenarioId) => {
-    const scenario = scenarios.find((s) => s.id === scenarioId);
-    const scenarioTabs = tabs?.filter((t) => t.scenario_id === scenarioId) || [];
-    const scenarioDrivers = driverValues?.filter((dv) => dv.scenario_id === scenarioId) || [];
+    const scenario = scenarios.find((s: { id: string }) => s.id === scenarioId);
+    const scenarioTabs = tabs?.filter((t: { scenario_id: string }) => t.scenario_id === scenarioId) || [];
+    const scenarioDrivers = driverValues?.filter((dv: { scenario_id: string }) => dv.scenario_id === scenarioId) || [];
 
     // Extract metrics from tabs if specific metrics requested
     let metricsData: Record<string, unknown> = {};
     if (metrics && metrics.length > 0) {
-      scenarioTabs.forEach((tab) => {
+      scenarioTabs.forEach((tab: { data: unknown }) => {
         if (tab.data && typeof tab.data === 'object') {
+          const tabData = tab.data as Record<string, unknown>;
           metrics.forEach((metricKey) => {
-            if (metricKey in tab.data) {
-              metricsData[metricKey] = (tab.data as Record<string, unknown>)[metricKey];
+            if (metricKey in tabData) {
+              metricsData[metricKey] = tabData[metricKey];
             }
           });
         }
@@ -82,7 +83,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     // Filter driver values by years if specified
     let filteredDrivers = scenarioDrivers;
     if (years && years.length > 0) {
-      filteredDrivers = scenarioDrivers.filter((dv) => years.includes(dv.year));
+      filteredDrivers = scenarioDrivers.filter((dv: { year: number }) => years.includes(dv.year));
     }
 
     return {
@@ -92,11 +93,17 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         type: scenario?.type,
         description: scenario?.description,
       },
-      tabs: scenarioTabs.map((t) => ({
+      tabs: scenarioTabs.map((t: { tab: string; data: unknown }) => ({
         tab: t.tab,
         data: t.data,
       })),
-      drivers: filteredDrivers.map((dv) => ({
+      drivers: filteredDrivers.map((dv: {
+        driver_id: string;
+        driver?: { display_name?: string; name?: string; category?: string; unit?: string };
+        year: number;
+        value: number;
+        source?: string;
+      }) => ({
         driver_id: dv.driver_id,
         driver_name: dv.driver?.display_name || dv.driver?.name,
         category: dv.driver?.category,
