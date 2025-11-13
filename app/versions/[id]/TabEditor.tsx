@@ -51,14 +51,19 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
   // Get schema for this tab
   const schema = tabSchemas[tab] || z.object({}).passthrough();
 
+  // Use explicit type for form data instead of inferring from dynamic schema
+  type TabFormData = Record<string, unknown>;
+
   const {
     register,
     handleSubmit,
     formState: { errors, isDirty },
     watch,
     reset,
-  } = useForm({
-    resolver: zodResolver(schema as any),
+  } = useForm<TabFormData>({
+    // @ts-expect-error - Dynamic schema selection prevents proper type inference.
+    // Runtime validation works correctly. zodResolver expects FieldValues but we use Record<string, unknown>.
+    resolver: zodResolver(schema),
     defaultValues: initialData,
     mode: 'onChange',
   });
@@ -66,22 +71,6 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
   // Watch all form values for autosave
   const formValues = watch();
   const debouncedValues = useDebounce(formValues, 800);
-
-  // Autosave when debounced values change
-  useEffect(() => {
-    // Don't autosave if user is not authenticated
-    if (authLoading || !session) {
-      return;
-    }
-    
-    if (isDirty && Object.keys(debouncedValues).length > 0) {
-      // Only autosave if form is valid (no errors)
-      if (Object.keys(errors).length === 0) {
-        saveTab(debouncedValues);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedValues, isDirty, errors, session, authLoading]);
 
   const saveTab = useCallback(async (data: Record<string, unknown>) => {
     if (saving) return;
@@ -162,7 +151,22 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
     } finally {
       setSaving(false);
     }
-  }, [versionId, tab, reset, router, saving]);
+  }, [versionId, tab, reset, router, saving, session]);
+
+  // Autosave when debounced values change
+  useEffect(() => {
+    // Don't autosave if user is not authenticated
+    if (authLoading || !session) {
+      return;
+    }
+
+    if (isDirty && Object.keys(debouncedValues as Record<string, unknown>).length > 0) {
+      // Only autosave if form is valid (no errors)
+      if (Object.keys(errors).length === 0) {
+        saveTab(debouncedValues as Record<string, unknown>);
+      }
+    }
+  }, [debouncedValues, isDirty, errors, session, authLoading, saveTab]);
 
   // Extract field names from schema (simplified - show common fields)
   const getFieldNames = (): string[] => {
@@ -194,10 +198,10 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSubmit((data) => saveTab(data))} className="space-y-3">
+      <form onSubmit={handleSubmit((data) => saveTab(data as Record<string, unknown>))} className="space-y-3">
         {fieldNames.map((fieldName) => {
-          const value = formValues[fieldName];
-          const fieldError = errors[fieldName];
+          const value = (formValues as Record<string, unknown>)[fieldName];
+          const fieldError = (errors as Record<string, { message?: string }>)[fieldName];
           const isDerived = derivedFields[tab]?.includes(fieldName);
 
           return (
@@ -213,7 +217,7 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
               {isDerived ? (
                 <input
                   type="text"
-                  value={value ?? ''}
+                  value={String(value ?? '')}
                   readOnly
                   className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 font-mono"
                 />
@@ -222,7 +226,7 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
                   <input
                     type={typeof value === 'number' ? 'number' : 'text'}
                     step={typeof value === 'number' ? 'any' : undefined}
-                    {...register(fieldName, {
+                    {...register(fieldName as any, {
                       valueAsNumber: typeof value === 'number',
                     })}
                     className={`w-full px-3 py-2 text-sm border rounded-lg transition-all ${
@@ -234,7 +238,7 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
                   {fieldError && (
                     <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
                       <span>⚠</span>
-                      <span>{fieldError.message as string}</span>
+                      <span>{fieldError.message || 'Validation error'}</span>
                     </p>
                   )}
                 </>
@@ -244,12 +248,12 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
         })}
 
         {/* Additional fields not in common list */}
-        {Object.keys(formValues)
+        {Object.keys(formValues as Record<string, unknown>)
           .filter(key => !fieldNames.includes(key) && !derivedFields[tab]?.includes(key))
           .slice(0, 5)
           .map((fieldName) => {
-            const value = formValues[fieldName];
-            const fieldError = errors[fieldName];
+            const value = (formValues as Record<string, unknown>)[fieldName];
+            const fieldError = (errors as Record<string, { message?: string }>)[fieldName];
 
             return (
               <div key={fieldName} className="space-y-1.5">
@@ -259,7 +263,7 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
                 <input
                   type={typeof value === 'number' ? 'number' : 'text'}
                   step={typeof value === 'number' ? 'any' : undefined}
-                  {...register(fieldName, {
+                  {...register(fieldName as any, {
                     valueAsNumber: typeof value === 'number',
                   })}
                   className={`w-full px-3 py-2 text-sm border rounded-lg transition-all ${
@@ -271,7 +275,7 @@ export default function TabEditor({ versionId, tab, initialData }: TabEditorProp
                 {fieldError && (
                   <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
                     <span>⚠</span>
-                    <span>{fieldError.message as string}</span>
+                    <span>{fieldError.message || 'Validation error'}</span>
                   </p>
                 )}
               </div>

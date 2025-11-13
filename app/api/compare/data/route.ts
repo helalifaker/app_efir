@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getCompareData } from '@/lib/getCompareData';
-import { logger } from '@/lib/logger';
 import { withErrorHandler, createErrorResponse } from '@/lib/withErrorHandler';
 
 export const GET = withErrorHandler(async (request: Request) => {
