@@ -10,6 +10,7 @@ import { useAuth } from '../providers/AuthProvider';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/versions', label: 'Versions', icon: '📋' },
+  { href: '/tuition-simulator', label: 'Tuition Simulator', icon: '🎯' },
   { href: '/compare', label: 'Compare', icon: '⚖️' },
   { href: '/reports', label: 'Reports', icon: '📄' },
   { href: '/assumptions', label: 'Assumptions', icon: '💡' },
@@ -57,12 +58,20 @@ export default function Navigation() {
           {/* User Menu */}
           <div className="flex items-center space-x-4">
             {session?.user && (
-              <Link
-                href="/admin"
-                className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-              >
-                ⚙️ Admin
-              </Link>
+              <>
+                <Link
+                  href="/admin"
+                  className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                >
+                  ⚙️ Settings
+                </Link>
+                <Link
+                  href="/admin/capex"
+                  className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                >
+                  💰 Capex
+                </Link>
+              </>
             )}
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold">
               {session?.user?.email?.[0]?.toUpperCase() || 'U'}
