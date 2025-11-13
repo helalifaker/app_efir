@@ -157,11 +157,95 @@ export const POST = withErrorHandler(async (
         const { error: errInsertTabs } = await supabase
           .from("version_tabs")
           .insert(toInsert);
-        
+
         if (errInsertTabs) {
           logger.error("Clone write version_tabs error", errInsertTabs, { versionId: id });
           await cleanup('Failed to insert cloned version_tabs');
           throw new Error(`Failed to clone version: unable to create tabs. ${errInsertTabs.message}`);
+        }
+      }
+
+      // Clone curriculum_plan (School Relocation Planner)
+      const { data: curriculumPlans, error: errCurriculumPlans } = await supabase
+        .from("curriculum_plan")
+        .select("*")
+        .eq("version_id", id);
+
+      if (!errCurriculumPlans && curriculumPlans && curriculumPlans.length > 0) {
+        const toInsertCurriculum = curriculumPlans.map((plan) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id: planId, created_at, updated_at, ...restPlan } = plan;
+          return {
+            ...restPlan,
+            version_id: inserted.id,
+          };
+        });
+
+        const { error: errInsertCurriculum } = await supabase
+          .from("curriculum_plan")
+          .insert(toInsertCurriculum);
+
+        if (errInsertCurriculum) {
+          logger.warn("Clone write curriculum_plan error", {
+            error: errInsertCurriculum,
+            versionId: id
+          });
+        }
+      }
+
+      // Clone rent_plan (School Relocation Planner)
+      const { data: rentPlans, error: errRentPlans } = await supabase
+        .from("rent_plan")
+        .select("*")
+        .eq("version_id", id);
+
+      if (!errRentPlans && rentPlans && rentPlans.length > 0) {
+        const toInsertRent = rentPlans.map((plan) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id: planId, created_at, updated_at, ...restPlan } = plan;
+          return {
+            ...restPlan,
+            version_id: inserted.id,
+          };
+        });
+
+        const { error: errInsertRent } = await supabase
+          .from("rent_plan")
+          .insert(toInsertRent);
+
+        if (errInsertRent) {
+          logger.warn("Clone write rent_plan error", {
+            error: errInsertRent,
+            versionId: id
+          });
+        }
+      }
+
+      // Clone opex_plan (School Relocation Planner)
+      const { data: opexPlans, error: errOpexPlans } = await supabase
+        .from("opex_plan")
+        .select("*")
+        .eq("version_id", id);
+
+      if (!errOpexPlans && opexPlans && opexPlans.length > 0) {
+        const toInsertOpex = opexPlans.map((plan) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id: planId, created_at, updated_at, ...restPlan } = plan;
+          return {
+            ...restPlan,
+            version_id: inserted.id,
+          };
+        });
+
+        const { error: errInsertOpex } = await supabase
+          .from("opex_plan")
+          .insert(toInsertOpex);
+
+        if (errInsertOpex) {
+          logger.warn("Clone write opex_plan error", {
+            error: errInsertOpex,
+            versionId: id
+          });
         }
       }
 
@@ -172,9 +256,9 @@ export const POST = withErrorHandler(async (
         .eq("version_id", id);
 
       if (errValidations) {
-        logger.warn("Clone read version_validations error (non-critical)", { 
-          error: errValidations, 
-          versionId: id 
+        logger.warn("Clone read version_validations error (non-critical)", {
+          error: errValidations,
+          versionId: id
         });
         // Don't fail if validations don't exist or can't be read
       } else if (validations && validations.length > 0) {
@@ -190,11 +274,11 @@ export const POST = withErrorHandler(async (
         const { error: errInsertValidations } = await supabase
           .from("version_validations")
           .insert(toInsertValidations);
-        
+
         if (errInsertValidations) {
-          logger.warn("Clone write version_validations error (non-critical)", { 
-            error: errInsertValidations, 
-            versionId: id 
+          logger.warn("Clone write version_validations error (non-critical)", {
+            error: errInsertValidations,
+            versionId: id
           });
           // Don't fail the whole operation if validations can't be cloned
           // Validations will be regenerated on next validation run
